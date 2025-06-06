@@ -1,363 +1,275 @@
 "use client";
 
-import { useState } from 'react';
-import Link from 'next/link';
-import { useAutomation, useYouTube, useClips } from '../hooks';
+import { useState } from "react";
+import Link from "next/link";
+import { useChannels } from '../hooks/useChannels';
+import { useClips } from '../hooks/useClips';
+import Sidebar from "../components/Sidebar";
 
 export default function Home() {
-  const { 
-    status: automationStatus, 
-    loading: automationLoading, 
-    error: automationError,
-    executeWorkflow, 
-    startPolling
-  } = useAutomation();
+  const [isStarting, setIsStarting] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [isAutomating, setIsAutomating] = useState(false);
+  const [downloadSuccess, setDownloadSuccess] = useState("");
 
-  const { 
-    stats, 
-    loading: youtubeLoading, 
-    error: youtubeError 
-  } = useYouTube();
+  const { channels, loading: channelsLoading, error: channelsError } = useChannels();
+  const { clips, loading: clipsLoading, error: clipsError } = useClips();
 
-  const {
-    clips,
-    loading: clipsLoading,
-    error: clipsError,
-    downloadClipsByChannelName
-  } = useClips();
+  // Calculate clip statistics
+  const clipStats = {
+    total: clips.length,
+    downloaded: clips.filter(clip => clip.downloadStatus === 'COMPLETED').length,
+    processing: clips.filter(clip => clip.downloadStatus === 'PROCESSING').length,
+    ready: clips.filter(clip => clip.downloadStatus === 'COMPLETED').length
+  };
 
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const handleStartAutomation = async () => {
+  const handleStart = async () => {
+    setIsStarting(true);
     try {
-      setLoading(true);
-      setError(null);
-      
-      await executeWorkflow({
-        channelName: "ExampleChannel",
-        clipLimit: 10,
-        daysBack: 7
-      });
-      
-      startPolling();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao iniciar automação');
+      // Simulate starting automation
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      setIsAutomating(true);
+    } catch (error) {
+      console.error('Error starting automation:', error);
     } finally {
-      setLoading(false);
+      setIsStarting(false);
     }
   };
 
   const handleDownloadClips = async () => {
+    setIsDownloading(true);
     try {
-      setLoading(true);
-      setError(null);
-      
-      await downloadClipsByChannelName("ExampleChannel", 10, 7);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao baixar clips');
+      // Simulate downloading clips
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      setDownloadSuccess("Clips downloaded successfully!");
+      setTimeout(() => setDownloadSuccess(""), 5000);
+    } catch (error) {
+      console.error('Error downloading clips:', error);
     } finally {
-      setLoading(false);
+      setIsDownloading(false);
     }
-  };
-
-  // Calcular estatísticas dos clips
-  const clipsStats = {
-    downloaded: clips.filter(clip => clip.downloadStatus === 'COMPLETED').length,
-    processing: clips.filter(clip => clip.downloadStatus === 'PROCESSING').length,
-    completed: clips.filter(clip => clip.downloadStatus === 'COMPLETED').length,
-    failed: clips.filter(clip => clip.downloadStatus === 'FAILED').length,
-    total: clips.length
   };
 
   return (
     <div className="relative flex size-full min-h-screen flex-col bg-[#121416] group/design-root overflow-x-hidden">
       <div className="layout-container flex h-full grow flex-col">
-        <div className="gap-1 px-6 flex flex-1 justify-center py-5">
+        <div className="flex h-full flex-1">
           {/* Sidebar */}
-          <div className="layout-content-container flex flex-col w-80">
-            <div className="flex h-full min-h-[700px] flex-col justify-between bg-[#121416] p-4">
-              <div className="flex flex-col gap-4">
-                <div className="flex gap-3 p-3">
-                  <div className="text-white flex size-6 shrink-0 items-center">
-                    <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <g clipPath="url(#clip0_6_543)">
-                        <path
-                          d="M42.1739 20.1739L27.8261 5.82609C29.1366 7.13663 28.3989 10.1876 26.2002 13.7654C24.8538 15.9564 22.9595 18.3449 20.6522 20.6522C18.3449 22.9595 15.9564 24.8538 13.7654 26.2002C10.1876 28.3989 7.13663 29.1366 5.82609 27.8261L20.1739 42.1739C21.4845 43.4845 24.5355 42.7467 28.1133 40.548C30.3042 39.2016 32.6927 37.3073 35 35C37.3073 32.6927 39.2016 30.3042 40.548 28.1133C42.7467 24.5355 43.4845 21.4845 42.1739 20.1739Z"
-                          fill="currentColor"
-                        />
-                        <path
-                          fillRule="evenodd"
-                          clipRule="evenodd"
-                          d="M7.24189 26.4066C7.31369 26.4411 7.64204 26.5637 8.52504 26.3738C9.59462 26.1438 11.0343 25.5311 12.7183 24.4963C14.7583 23.2426 17.0256 21.4503 19.238 19.238C21.4503 17.0256 23.2426 14.7583 24.4963 12.7183C25.5311 11.0343 26.1438 9.59463 26.3738 8.52504C26.5637 7.64204 26.4411 7.31369 26.4066 7.24189C26.345 7.21246 26.143 7.14535 25.6664 7.1918C24.9745 7.25925 23.9954 7.5498 22.7699 8.14278C20.3369 9.32007 17.3369 11.4915 14.4142 14.4142C11.4915 17.3369 9.32007 20.3369 8.14278 22.7699C7.5498 23.9954 7.25925 24.9745 7.1918 25.6664C7.14534 26.143 7.21246 26.345 7.24189 26.4066ZM29.9001 10.7285C29.4519 12.0322 28.7617 13.4172 27.9042 14.8126C26.465 17.1544 24.4686 19.6641 22.0664 22.0664C19.6641 24.4686 17.1544 26.465 14.8126 27.9042C13.4172 28.7617 12.0322 29.4519 10.7285 29.9001L21.5754 40.747C21.6001 40.7606 21.8995 40.931 22.8729 40.7217C23.9424 40.4916 25.3821 39.879 27.0661 38.8441C29.1062 37.5904 31.3734 35.7982 33.5858 33.5858C35.7982 31.3734 37.5904 29.1062 38.8441 27.0661C39.879 25.3821 40.4916 23.9425 40.7216 22.8729C40.931 21.8995 40.7606 21.6001 40.747 21.5754L29.9001 10.7285ZM29.2403 4.41187L43.5881 18.7597C44.9757 20.1473 44.9743 22.1235 44.6322 23.7139C44.2714 25.3919 43.4158 27.2666 42.252 29.1604C40.8128 31.5022 38.8165 34.012 36.4142 36.4142C34.012 38.8165 31.5022 40.8128 29.1604 42.252C27.2666 43.4158 25.3919 44.2714 23.7139 44.6322C22.1235 44.9743 20.1473 44.9757 18.7597 43.5881L4.41187 29.2403C3.29027 28.1187 3.08209 26.5973 3.21067 25.2783C3.34099 23.9415 3.8369 22.4852 4.54214 21.0277C5.96129 18.0948 8.43335 14.7382 11.5858 11.5858C14.7382 8.43335 18.0948 5.9613 21.0277 4.54214C22.4852 3.8369 23.9415 3.34099 25.2783 3.21067C26.5973 3.08209 28.1187 3.29028 29.2403 4.41187Z"
-                          fill="currentColor"
-                        />
-                      </g>
-                      <defs>
-                        <clipPath id="clip0_6_543">
-                          <rect width="48" height="48" fill="white" />
-                        </clipPath>
-                      </defs>
-                    </svg>
-                  </div>
-                  <h2 className="text-white text-lg font-bold leading-tight tracking-[-0.015em]">AutoClipster</h2>
-                </div>
-                <div className="flex flex-col gap-2">
-                  <div className="flex items-center gap-3 px-3 py-2 rounded-xl bg-[#2c3135]">
-                    <div className="text-white" data-icon="SquaresFour" data-size="20px" data-weight="regular">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="20px" height="20px" fill="currentColor" viewBox="0 0 256 256">
-                        <path d="M104,40H56A16,16,0,0,0,40,56v48a16,16,0,0,0,16,16h48a16,16,0,0,0,16-16V56A16,16,0,0,0,104,40Zm0,64H56V56h48v48Zm96-64H152a16,16,0,0,0-16,16v48a16,16,0,0,0,16,16h48a16,16,0,0,0,16-16V56A16,16,0,0,0,200,40Zm0,64H152V56h48v48ZM104,136H56a16,16,0,0,0-16,16v48a16,16,0,0,0,16,16h48a16,16,0,0,0,16-16V152A16,16,0,0,0,104,136Zm0,64H56V152h48v48Zm96-64H152a16,16,0,0,0-16,16v48a16,16,0,0,0,16,16h48a16,16,0,0,0,16-16V152A16,16,0,0,0,200,136Zm0,64H152V152h48v48Z" />
-                      </svg>
-                    </div>
-                    <p className="text-white text-sm font-medium leading-normal">Dashboard</p>
-                  </div>
-                  <Link href="/channels" className="flex items-center gap-3 px-3 py-2">
-                    <div className="text-[#a2abb3]" data-icon="ChatsCircle" data-size="20px" data-weight="regular">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="20px" height="20px" fill="currentColor" viewBox="0 0 256 256">
-                        <path d="M231.79,187.33A80,80,0,0,0,169.6,72.72L151.36,131.4A40,40,0,1,1,124.6,104.64l58.68-18.24A80,80,0,0,0,68.67,152.21L20.5,199.83a12,12,0,0,0,17,17l47.62-47.62A80,80,0,0,0,231.79,187.33ZM80,152a40,40,0,1,1,40,40A40,40,0,0,1,80,152Z" />
-                      </svg>
-                    </div>
-                    <p className="text-[#a2abb3] text-sm font-medium leading-normal">Channels</p>
-                  </Link>
-                  <Link href="/clips" className="flex items-center gap-3 px-3 py-2">
-                    <div className="text-[#a2abb3]" data-icon="FilmSlate" data-size="20px" data-weight="regular">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="20px" height="20px" fill="currentColor" viewBox="0 0 256 256">
-                        <path d="M216,104H102.09L210,75.51a8,8,0,0,0,5.68-9.84l-8.16-30a15.93,15.93,0,0,0-19.42-11.13L35.81,64.74a15.75,15.75,0,0,0-9.7,7.4,15.51,15.51,0,0,0-1.55,12L32,111.56c0,.14,0,.29,0,.44v88a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V112A8,8,0,0,0,216,104ZM192.16,40l6,22.07-22.62,6L147.42,51.83Zm-66.69,17.6,28.12,16.24-36.94,9.75L88.53,67.37Zm-79.4,44.62-6-22.08,26.5-7L94.69,89.4ZM208,200H48V120H208v80Z"></path>
-                      </svg>
-                    </div>
-                    <p className="text-[#a2abb3] text-sm font-medium leading-normal">Clips</p>
-                  </Link>
-                  <Link href="/uploads" className="flex items-center gap-3 px-3 py-2">
-                    <div className="text-[#a2abb3]" data-icon="Upload" data-size="20px" data-weight="regular">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="20px" height="20px" fill="currentColor" viewBox="0 0 256 256">
-                        <path d="M74.34,77.66a8,8,0,0,1,0-11.32l48-48a8,8,0,0,1,11.32,0l48,48a8,8,0,0,1-11.32,11.32L136,43.31V128a8,8,0,0,1-16,0V43.31L85.66,77.66A8,8,0,0,1,74.34,77.66ZM240,136v64a16,16,0,0,1-16,16H32a16,16,0,0,1-16-16V136a16,16,0,0,1,16-16h68a4,4,0,0,1,4,4v3.46c0,13.45,11,24.79,24.46,24.54A24,24,0,0,0,152,128v-4a4,4,0,0,1,4-4h68A16,16,0,0,1,240,136Zm-40,32a12,12,0,1,0-12,12A12,12,0,0,0,200,168Z"></path>
-                      </svg>
-                    </div>
-                    <p className="text-[#a2abb3] text-sm font-medium leading-normal">Uploads</p>
-                  </Link>
-                  <Link href="/workflows" className="flex items-center gap-3 px-3 py-2">
-                    <div className="text-[#a2abb3]" data-icon="Gear" data-size="20px" data-weight="regular">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="20px" height="20px" fill="currentColor" viewBox="0 0 256 256">
-                        <path d="M128,80a48,48,0,1,0,48,48A48.05,48.05,0,0,0,128,80Zm0,80a32,32,0,1,1,32-32A32,32,0,0,1,128,160Zm88-29.84q.06-2.16,0-4.32l14.92-18.64a8,8,0,0,0,1.48-7.06,107.6,107.6,0,0,0-10.88-26.25,8,8,0,0,0-6-3.93l-23.72-2.64q-1.48-1.56-3.12-3.12L186,40.44a8,8,0,0,0-3.93-6,107.29,107.29,0,0,0-26.25-10.87,8,8,0,0,0-7.06,1.49L130.16,40Q128,40,125.84,40L107.2,25.11a8,8,0,0,0-7.06-1.49A107.6,107.6,0,0,0,73.89,34.51a8,8,0,0,0-3.93,6L67.32,64.27q-1.56,1.56-3.12,3.12L40.44,70a8,8,0,0,0-6,3.93,107.71,107.71,0,0,0-10.87,26.25,8,8,0,0,0,1.49,7.06L40,125.84Q40,128,40,130.16L25.11,148.8a8,8,0,0,0-1.49,7.06,107.6,107.6,0,0,0,10.87,26.25,8,8,0,0,0,6,3.93l23.72,2.64q1.56,1.56,3.12,3.12L70,215.56a8,8,0,0,0,3.93,6,107.71,107.71,0,0,0,26.25,10.87,8,8,0,0,0,7.06-1.49L125.84,216q2.16.06,4.32,0l18.64,14.92a8,8,0,0,0,7.06,1.49,107.29,107.29,0,0,0,26.25-10.87,8,8,0,0,0,3.93-6l2.64-23.72q1.56-1.56,3.12-3.12L215.56,186a8,8,0,0,0,6-3.93,107.71,107.71,0,0,0,10.87-26.25,8,8,0,0,0-1.49-7.06ZM128,192a64,64,0,1,1,64-64A64.07,64.07,0,0,1,128,192Z" />
-                      </svg>
-                    </div>
-                    <p className="text-[#a2abb3] text-sm font-medium leading-normal">Workflows</p>
-                  </Link>
-                  <Link href="/settings" className="flex items-center gap-3 px-3 py-2">
-                    <div className="text-[#a2abb3]" data-icon="GearSix" data-size="20px" data-weight="regular">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="20px" height="20px" fill="currentColor" viewBox="0 0 256 256">
-                        <path d="M237.94,107.21a8,8,0,0,0-3.89-5.4l-29.83-17-.12-33.62a8,8,0,0,0-2.83-6.08,111.91,111.91,0,0,0-36.72-20.67,8,8,0,0,0-6.46.59L128,41.85,97.91,25a8,8,0,0,0-6.46-.59A111.91,111.91,0,0,0,54.73,45.15a8,8,0,0,0-2.83,6.08L51.78,84.84,21.95,101.81a8,8,0,0,0-3.89,5.4,112.1,112.1,0,0,0,0,41.58,8,8,0,0,0,3.89,5.4l29.83,17,.12,33.62a8,8,0,0,0,2.83,6.08,111.91,111.91,0,0,0,36.72,20.67,8,8,0,0,0,6.46-.59L128,214.15,158.09,231a7.91,7.91,0,0,0,3.9,1,8.09,8.09,0,0,0,2.56-.42,111.91,111.91,0,0,0,36.72-20.67,8,8,0,0,0,2.83-6.08l.12-33.62,29.83-17a8,8,0,0,0,3.89-5.4A112.1,112.1,0,0,0,237.94,107.21ZM128,168a40,40,0,1,1,40-40A40,40,0,0,1,128,168Z" />
-                      </svg>
-                    </div>
-                    <p className="text-[#a2abb3] text-sm font-medium leading-normal">Settings</p>
-                  </Link>
-                  <div className="flex items-center gap-3 px-3 py-2">
-                    <div className="text-[#a2abb3]" data-icon="Question" data-size="20px" data-weight="regular">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="20px" height="20px" fill="currentColor" viewBox="0 0 256 256">
-                        <path d="M140,180a12,12,0,1,1-12-12A12,12,0,0,1,140,180ZM128,72c-22.06,0-40,16.15-40,36v4a8,8,0,0,0,16,0v-4c0-11,10.77-20,24-20s24,9,24,20-10.77,20-24,20a8,8,0,0,0-8,8v8a8,8,0,0,0,16,0v-.72c18.24-3.35,32-17.9,32-35.28C168,88.15,150.06,72,128,72Zm104,56A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128Z" />
-                      </svg>
-                    </div>
-                    <p className="text-[#a2abb3] text-sm font-medium leading-normal">Help</p>
-                  </div>
-                </div>
-              </div>
-              <div className="flex flex-col gap-4">
-                <div className="bg-center bg-no-repeat aspect-square bg-cover rounded-full w-10 h-10" style={{backgroundImage: 'url("https://lh3.googleusercontent.com/aida-public/AB6AXuCxqDYy6GKAUSeccG0FfR8nuNmi4V1Jixy4GQgQJqqx0mdOfspbB5FOrKkNdhuXpSCa94-3gAwrcMl_zMyRp5HYxc_AuwgW8oouLMBFUHXX8BzXJ0P77w3F5Y-A6HZ19C-WFoQdOcVoqvvccGzhv3STn_sQqEBY0NNK0u58o9x51BM_86ifbsvRhFkLSV-WDnIdXO6oPU55KmZvYYhewCQEcCt8qkv99uxBdADP7npsIm0ub72AEplAxTLgNwb_oWEnWu5Xs9AUn_op")'}} />
-              </div>
-            </div>
-          </div>
+          <Sidebar />
 
           {/* Main Content */}
-          <div className="layout-content-container flex flex-col max-w-[960px] flex-1">
-            <div className="flex flex-wrap justify-between gap-3 p-4">
+          <div className="layout-content-container flex flex-col flex-1">
+            {/* Main Content Area */}
+            <div className="flex flex-col bg-[#121416] p-8 flex-1 overflow-y-auto">
               {/* Header */}
-              <div className="flex min-w-72 flex-col gap-3">
-                <div className="flex flex-col gap-1">
-                  <h1 className="text-white text-2xl font-bold leading-tight">Dashboard</h1>
+              <div className="flex items-center justify-between mb-8">
+                <div>
+                  <h1 className="text-white text-[32px] font-bold leading-tight tracking-[-0.015em]">
+                    Dashboard
+                  </h1>
                   <p className="text-[#a2abb3] text-base font-normal leading-normal">
-                    Manage your clips and workflows
+                    Manage your automated clip generation
                   </p>
                 </div>
+                
+                <div className="flex items-center gap-3">
+                  <button 
+                    onClick={handleStart}
+                    disabled={isStarting || isAutomating}
+                    className={`flex min-w-[120px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-xl h-10 px-4 flex-row-reverse ${
+                      isAutomating ? 'bg-green-600 text-white' : 'bg-[#2c90ea] text-white hover:bg-[#247bc7]'
+                    } text-sm font-bold leading-normal tracking-[0.015em] transition-all duration-200`}
+                  >
+                    {isStarting ? (
+                      <span className="animate-spin">⏳</span>
+                    ) : isAutomating ? (
+                      <>
+                        <span className="ml-2">🔄</span>
+                        <span>Automation Running</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="ml-2">▶️</span>
+                        <span>Start Automation</span>
+                      </>
+                    )}
+                  </button>
+                  
+                  <button 
+                    onClick={handleDownloadClips}
+                    disabled={isDownloading || clips.length === 0}
+                    className={`flex min-w-[120px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-xl h-10 px-4 ${
+                      clips.length === 0 
+                        ? 'bg-gray-600 text-gray-400 cursor-not-allowed' 
+                        : 'bg-[#34c759] text-white hover:bg-[#2ea043]'
+                    } text-sm font-bold leading-normal tracking-[0.015em] transition-all duration-200`}
+                  >
+                    {isDownloading ? (
+                      <>
+                        <span className="animate-spin mr-2">⏳</span>
+                        <span>Downloading...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="mr-2">⬇️</span>
+                        <span>Download Clips</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
 
-                {/* Error Display */}
-                {(error || automationError || youtubeError || clipsError) && (
-                  <div className="flex items-center gap-3 rounded-xl bg-red-900/20 border border-red-600/30 p-4">
-                    <div className="text-red-400">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 256 256">
-                        <path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216ZM116,96v64a12,12,0,0,0,24,0V96a12,12,0,0,0-24,0Z"/>
-                      </svg>
+              {/* Error Display */}
+              {(channelsError || clipsError) && (
+                <div className="mb-6 p-4 bg-red-900/20 border border-red-500/30 rounded-lg">
+                  <p className="text-red-400 font-semibold">Error:</p>
+                  <p className="text-red-300">{channelsError || clipsError}</p>
+                </div>
+              )}
+
+              {/* Success Message */}
+              {downloadSuccess && (
+                <div className="mb-6 p-4 bg-green-900/20 border border-green-500/30 rounded-lg">
+                  <p className="text-green-400 font-semibold">Success!</p>
+                  <p className="text-green-300">{downloadSuccess}</p>
+                </div>
+              )}
+
+              {/* Statistics Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <div className="bg-[#1c1f22] border border-[#2c3135] rounded-xl p-6 shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-[#a2abb3] text-sm font-medium">Total Clips</p>
+                      <p className="text-white text-2xl font-bold">{clipStats.total}</p>
                     </div>
-                    <span className="text-red-300 text-sm">{error || automationError || youtubeError || clipsError}</span>
+                    <div className="w-12 h-12 bg-blue-900/30 rounded-lg flex items-center justify-center">
+                      <span className="text-blue-400 text-xl">📹</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-[#1c1f22] border border-[#2c3135] rounded-xl p-6 shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-[#a2abb3] text-sm font-medium">Downloaded</p>
+                      <p className="text-white text-2xl font-bold">{clipStats.downloaded}</p>
+                    </div>
+                    <div className="w-12 h-12 bg-green-900/30 rounded-lg flex items-center justify-center">
+                      <span className="text-green-400 text-xl">⬇️</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-[#1c1f22] border border-[#2c3135] rounded-xl p-6 shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-[#a2abb3] text-sm font-medium">Processing</p>
+                      <p className="text-white text-2xl font-bold">{clipStats.processing}</p>
+                    </div>
+                    <div className="w-12 h-12 bg-yellow-900/30 rounded-lg flex items-center justify-center">
+                      <span className="text-yellow-400 text-xl">⏳</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-[#1c1f22] border border-[#2c3135] rounded-xl p-6 shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-[#a2abb3] text-sm font-medium">Ready</p>
+                      <p className="text-white text-2xl font-bold">{clipStats.ready}</p>
+                    </div>
+                    <div className="w-12 h-12 bg-purple-900/30 rounded-lg flex items-center justify-center">
+                      <span className="text-purple-400 text-xl">✅</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Recent Activity */}
+              <div className="bg-[#1c1f22] border border-[#2c3135] rounded-xl p-6 shadow-sm">
+                <h2 className="text-white text-xl font-bold mb-4">Recent Activity</h2>
+                
+                {/* Loading state */}
+                {(channelsLoading || clipsLoading) && (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-400"></div>
+                    <span className="ml-3 text-[#a2abb3]">Loading...</span>
                   </div>
                 )}
 
-                {/* Stats Cards */}
-                <div className="grid gap-3 p-4">
-                  <div className="flex gap-3">
-                    <div className="flex h-8 shrink-0 items-center justify-center gap-x-2 rounded-xl bg-[#2c3135] pl-4 pr-4">
-                      <p className="text-white text-sm font-medium leading-normal">Downloaded Clips</p>
-                    </div>
-                    <div className="flex h-8 shrink-0 items-center justify-center gap-x-2 rounded-xl bg-[#2c3135] pl-4 pr-4">
-                      <p className="text-white text-sm font-medium leading-normal">Processed Clips</p>
-                    </div>
-                    <div className="flex h-8 shrink-0 items-center justify-center gap-x-2 rounded-xl bg-[#2c3135] pl-4 pr-4">
-                      <p className="text-white text-sm font-medium leading-normal">YouTube Videos</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Stats Section */}
-            <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3">
-              <div className="flex min-h-[180px] flex-col gap-8 rounded-xl bg-[#1c1f22] p-4">
-                <div className="grid min-h-[140px] flex-1 grid-cols-[20px_1fr] gap-x-3 gap-y-6">
-                  <p className="text-[#a2abb3] text-xs font-medium leading-normal tracking-[0.015em]">Downloaded Clips</p>
-                  <div className="flex items-center gap-1">
-                    <p className="text-white text-4xl font-black leading-tight tracking-[-0.033em]">
-                      {clipsLoading ? '...' : clipsStats.downloaded}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex min-h-[180px] flex-col gap-8 rounded-xl bg-[#1c1f22] p-4">
-                <div className="grid min-h-[140px] flex-1 grid-cols-[20px_1fr] gap-x-3 gap-y-6">
-                  <p className="text-[#a2abb3] text-xs font-medium leading-normal tracking-[0.015em]">Processed Clips</p>
-                  <div className="flex items-center gap-1">
-                    <p className="text-white text-4xl font-black leading-tight tracking-[-0.033em]">
-                      {clipsLoading ? '...' : clipsStats.completed}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex min-h-[180px] flex-col gap-8 rounded-xl bg-[#1c1f22] p-4">
-                <div className="grid min-h-[140px] flex-1 grid-cols-[20px_1fr] gap-x-3 gap-y-6">
-                  <p className="text-[#a2abb3] text-xs font-medium leading-normal tracking-[0.015em]">YouTube Videos</p>
-                  <div className="flex items-center gap-1">
-                    <p className="text-white text-4xl font-black leading-tight tracking-[-0.033em]">
-                      {youtubeLoading ? '...' : (stats?.totalVideos || 0)}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Automation Status */}
-            <div className="flex flex-col gap-3 p-4">
-              <h2 className="text-white text-lg font-bold leading-tight tracking-[-0.015em]">Automation Status</h2>
-              <p className="text-[#a2abb3] text-sm font-normal leading-normal">Real-time processing metrics</p>
-            </div>
-
-            {automationLoading ? (
-              <div className="flex min-h-[180px] flex-col gap-8 rounded-xl bg-[#1c1f22] p-4 m-4">
-                <div className="text-center py-4">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto"></div>
-                  <p className="mt-2 text-[#a2abb3]">Carregando status...</p>
-                </div>
-              </div>
-            ) : automationStatus ? (
-              <div className="flex min-h-[180px] flex-col gap-8 rounded-xl bg-[#1c1f22] p-4 m-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="flex flex-col gap-1">
-                    <span className="text-[#a2abb3] text-xs">Processing Active</span>
-                    <span className={`text-sm font-medium ${automationStatus.isProcessingActive ? 'text-green-400' : 'text-red-400'}`}>
-                      {automationStatus.isProcessingActive ? 'YES' : 'NO'}
-                    </span>
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <span className="text-[#a2abb3] text-xs">Pending Clips</span>
-                    <span className="text-white text-sm font-medium">{automationStatus.totalClipsPending}</span>
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <span className="text-[#a2abb3] text-xs">Avg Processing Time</span>
-                    <span className="text-white text-sm font-medium">{automationStatus.averageProcessingTime}</span>
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <span className="text-[#a2abb3] text-xs">Last Processed</span>
-                    <span className="text-white text-sm font-medium">
-                      {automationStatus.lastProcessedAt ? new Date(automationStatus.lastProcessedAt).toLocaleString() : 'Never'}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="flex min-h-[180px] flex-col gap-8 rounded-xl bg-[#1c1f22] p-4 m-4">
-                <div className="text-[#a2abb3] text-sm">Nenhum clip encontrado</div>
-              </div>
-            )}
-
-            {/* Performance Chart Placeholder */}
-            <div className="flex flex-col gap-3 p-4">
-              <h2 className="text-white text-lg font-bold leading-tight tracking-[-0.015em]">Performance (Last 30 Days)</h2>
-              <p className="text-[#a2abb3] text-sm font-normal leading-normal">Clip processing metrics</p>
-            </div>
-
-            <div className="flex min-h-[180px] flex-col gap-8 rounded-xl bg-[#1c1f22] p-4 m-4">
-              <div className="flex flex-1 flex-col justify-center items-center">
-                <p className="text-[#a2abb3] text-sm">Chart placeholder - Integration ready</p>
-              </div>
-            </div>
-
-            {/* Action Buttons */}
-            <div className="flex gap-3 p-4">
-              <button
-                onClick={handleStartAutomation}
-                disabled={loading}
-                className="flex min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-xl h-10 px-4 bg-[#2884e6] text-white text-sm font-bold leading-normal tracking-[0.015em] disabled:opacity-50"
-              >
-                <span className="truncate">
-                  {loading ? 'Iniciando...' : 'Iniciar Automação'}
-                </span>
-              </button>
-
-              <button
-                onClick={handleDownloadClips}
-                disabled={loading}
-                className="flex min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-xl h-10 px-4 bg-[#2c3135] text-white text-sm font-bold leading-normal tracking-[0.015em] disabled:opacity-50"
-              >
-                <span className="truncate">
-                  {loading ? 'Baixando...' : 'Baixar Clips'}
-                </span>
-              </button>
-
-              <Link
-                href="/channels"
-                className="flex min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-xl h-10 px-4 bg-[#7c3aed] text-white text-sm font-bold leading-normal tracking-[0.015em]"
-              >
-                <span className="truncate">Gerenciar Canais</span>
-              </Link>
-            </div>
-
-            {/* Recent Clips */}
-            {clips.length > 0 && (
-              <>
-                <div className="flex flex-col gap-3 p-4">
-                  <h2 className="text-white text-lg font-bold leading-tight tracking-[-0.015em]">Recent Clips</h2>
-                  <p className="text-[#a2abb3] text-sm font-normal leading-normal">Latest downloaded and processed clips</p>
-                </div>
-
-                <div className="flex flex-col gap-3 p-4">
-                  {clips.slice(0, 5).map((clip, index) => (
-                    <div key={index} className="flex items-center gap-4 bg-[#1c1f22] rounded-xl p-4">
-                      <div className="flex flex-1 flex-col">
-                        <p className="text-white text-sm font-medium leading-normal">{clip.title}</p>
-                        <p className="text-[#a2abb3] text-xs">{clip.streamerName} • {new Date(clip.createdAt).toLocaleDateString()}</p>
+                {/* Automation Status */}
+                {!channelsLoading && !clipsLoading && (
+                  <div className={`p-4 rounded-lg mb-4 ${
+                    isAutomating ? 'bg-green-900/20 border border-green-500/30' : 'bg-[#1c1f22] border border-[#2c3135]'
+                  }`}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center">
+                        <div className={`w-2 h-2 rounded-full mr-3 ${
+                          isAutomating ? 'bg-green-400 animate-pulse' : 'bg-gray-500'
+                        }`}></div>
+                        <span className={`font-medium ${
+                          isAutomating ? 'text-green-300' : 'text-[#a2abb3]'
+                        }`}>
+                          Automation Status
+                        </span>
                       </div>
-                      <div className={`flex h-6 shrink-0 items-center justify-center gap-x-2 rounded-full px-3 ${
-                        clip.downloadStatus === 'COMPLETED' ? 'bg-green-900/30 text-green-400' :
-                        clip.downloadStatus === 'PROCESSING' ? 'bg-yellow-900/30 text-yellow-400' :
-                        clip.downloadStatus === 'FAILED' ? 'bg-red-900/30 text-red-400' :
-                        'bg-blue-900/30 text-blue-400'
+                      <span className={`text-sm ${
+                        isAutomating ? 'text-green-400' : 'text-gray-400'
                       }`}>
-                        <p className="text-xs font-medium leading-normal">{clip.downloadStatus}</p>
-                      </div>
+                        {isAutomating ? 'Running' : 'Stopped'}
+                      </span>
                     </div>
-                  ))}
-                </div>
-              </>
-            )}
+                  </div>
+                )}
+
+                {/* Channels Summary */}
+                {channels.length > 0 && (
+                  <div className="space-y-3">
+                    <h3 className="text-white font-semibold">Active Channels ({channels.length})</h3>
+                    {channels.slice(0, 3).map((channel) => (
+                      <div key={channel.id} className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+                        <div className="flex items-center">
+                          <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center mr-3">
+                            <span className="text-white text-sm font-bold">
+                              {channel.name.charAt(0).toUpperCase()}
+                            </span>
+                          </div>
+                          <div>
+                            <p className="text-white font-medium">{channel.name}</p>
+                            <p className="text-[#a2abb3] text-sm">@{channel.url}</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-[#a2abb3] text-sm">Last checked</p>
+                          <p className="text-white text-sm font-medium">
+                            {new Date(channel.createdAt).toLocaleTimeString()}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                    {channels.length > 3 && (
+                      <Link href="/channels" className="block text-blue-400 hover:text-blue-300 text-sm font-medium">
+                        View all {channels.length} channels →
+                      </Link>
+                    )}
+                  </div>
+                )}
+
+                {/* No data state */}
+                {!channelsLoading && !clipsLoading && channels.length === 0 && (
+                  <div className="text-center py-8">
+                    <p className="text-[#a2abb3] mb-4">No channels configured yet</p>
+                    <Link 
+                      href="/channels" 
+                      className="inline-flex items-center justify-center px-4 py-2 bg-[#2c90ea] text-white rounded-lg hover:bg-[#247bc7] transition-colors"
+                    >
+                      Add Your First Channel
+                    </Link>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </div>
