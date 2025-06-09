@@ -18,9 +18,9 @@ export default function Home() {
   // Calculate clip statistics
   const clipStats = {
     total: clips.length,
-    downloaded: clips.filter(clip => clip.downloadStatus === 'COMPLETED').length,
-    processing: clips.filter(clip => clip.downloadStatus === 'PROCESSING').length,
-    ready: clips.filter(clip => clip.downloadStatus === 'COMPLETED').length
+    downloaded: clips.filter(clip => clip.finalStatus === 'DOWNLOADED' || clip.finalStatus === 'READY').length,
+    processing: clips.filter(clip => clip.finalStatus === 'PROCESSING' || clip.processingStatus === 'PROCESSING').length,
+    ready: clips.filter(clip => clip.finalStatus === 'READY' || clip.finalStatus === 'UPLOADED').length
   };
 
   const handleStart = async () => {

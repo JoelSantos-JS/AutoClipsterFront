@@ -28,27 +28,74 @@ export const channelsService = {
   // POST /api/channels
   async addChannel(channelData: ChannelRequest): Promise<ChannelResponse> {
     try {
-      await apiClient.post('/api/channels', {
-        twitchUsername: channelData.name,
-        channelUrl: channelData.url,
-        customPromptSettings: channelData.description || '',
-        uploadToYouTube: true
-      });
+      console.log('🔍 Frontend - Dados recebidos pelo service:', channelData);
+      
+      // Validação local antes de enviar
+      if (!channelData.name || !channelData.name.trim()) {
+        throw new Error('Nome do canal é obrigatório');
+      }
+      
+      if (!channelData.platform) {
+        throw new Error('Plataforma é obrigatória');
+      }
+      
+      // Formato correto que o backend espera
+      const requestData = {
+        channelName: channelData.name.trim(), // ✅ channelName (não name)
+        platform: channelData.platform.toUpperCase(), // ✅ TWITCH ou YOUTUBE
+        isActive: true, // ✅ Opcional (padrão: true)
+        priority: 1 // ✅ Opcional
+      };
+      
+      console.log('📤 Frontend - Dados sendo enviados para API (formato correto):', requestData);
+      
+      const response = await apiClient.post('/api/channels', requestData);
+      
+      // Verificar se a resposta é um objeto de sucesso ou string simples
+      interface ApiResponse {
+        success?: boolean;
+        message?: string;
+        channel?: {
+          id?: number;
+          channelUrl?: string;
+          createdAt?: string;
+        };
+      }
+      
+      let result: ApiResponse;
+      if (typeof response === 'string') {
+        result = { success: true, message: response };
+      } else {
+        result = response as ApiResponse;
+      }
+      
+      console.log('✅ Resposta do backend:', result);
+      
+      // Verificar se houve erro na resposta
+      if (result.success === false) {
+        throw new Error(result.message || 'Erro ao adicionar canal');
+      }
 
-      // Return a mock response since the API doesn't return the created channel
+      // Return a response matching our frontend format
       return {
-        id: Date.now(), // Temporary ID
+        id: result.channel?.id || Date.now(), // Use ID do backend ou temporary ID
         name: channelData.name,
         platform: channelData.platform,
-        url: channelData.url,
+        url: result.channel?.channelUrl || channelData.url || `https://twitch.tv/${channelData.name}`,
         description: channelData.description || '',
         status: 'active',
         lastClipAt: null,
-        createdAt: new Date().toISOString()
+        createdAt: result.channel?.createdAt || new Date().toISOString()
       };
     } catch (error) {
-      console.error('Error adding channel:', error);
-      throw error;
+      console.error('❌ Erro ao adicionar canal:', error);
+      
+      // Tratar diferentes tipos de erro
+      if (error instanceof Error) {
+        throw error; // Re-throw para manter a mensagem original
+      } else {
+        throw new Error('Erro desconhecido ao adicionar canal');
+      }
     }
   },
 

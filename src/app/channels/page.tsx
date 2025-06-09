@@ -1,136 +1,523 @@
 "use client";
 
 import { useState } from "react";
-import { useChannels } from '../../hooks/useChannels';
-import { ChannelRequest } from '../../types';
+import { useChannels } from '../../hooks/useChannels'; // Para canais Twitch
+import { useMultipleChannels } from '../../hooks/useMultipleChannels'; // Para canais YouTube
 import Sidebar from "../../components/Sidebar";
 
 export default function ChannelsPage() {
+  // Hooks para canais Twitch (monitoramento)
   const {
-    channels,
-    loading,
-    error,
-    addChannel,
-    removeChannel,
-    testChannel,
-    refreshChannels
+    channels: twitchChannels,
+    loading: twitchLoading,
+    error: twitchError,
+    addChannel: addTwitchChannel,
+    removeChannel: removeTwitchChannel,
+    testChannel: testTwitchChannel,
+    refreshChannels: refreshTwitchChannels
   } = useChannels();
 
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [testResults, setTestResults] = useState<Record<number, { message: string; clips: number; responseTime: number } | undefined>>({});
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [formData, setFormData] = useState<ChannelRequest>({
+  // Hooks para canais YouTube (uploads)
+  const {
+    channels: youtubeChannels,
+    activeChannelId,
+    allChannelsStats,
+    loading: youtubeLoading,
+    selectingChannel: youtubeSelecting,
+    removingChannel: youtubeRemoving,
+    error: youtubeError,
+    successMessage,
+    addChannel: addYouTubeChannel,
+    selectChannel: selectYouTubeChannel,
+    removeChannel: removeYouTubeChannel,
+    getChannelById,
+    hasChannels: hasYouTubeChannels,
+    getConnectedChannelsCount,
+    isChannelPolling,
+    refreshAll: refreshYouTubeChannels,
+    getChannelStats,
+    formatNumber
+  } = useMultipleChannels();
+
+  // Estados locais
+  const [activeTab, setActiveTab] = useState<'twitch' | 'youtube'>('twitch');
+  const [showAddTwitchModal, setShowAddTwitchModal] = useState(false);
+  const [showConnectYouTubeModal, setShowConnectYouTubeModal] = useState(false);
+  const [showRemoveTwitchConfirm, setShowRemoveTwitchConfirm] = useState<number | null>(null);
+  const [showRemoveYouTubeConfirm, setShowRemoveYouTubeConfirm] = useState<string | null>(null);
+
+  // Estados para formulários
+  const [newTwitchChannel, setNewTwitchChannel] = useState({
     name: '',
-    platform: 'twitch',
     url: '',
-    description: ''
-  });
-  const [actionLoading, setActionLoading] = useState({
-    add: false,
-    remove: {} as Record<number, boolean>,
-    test: {} as Record<number, boolean>,
-    refresh: false
+    description: '',
+    platform: 'twitch' as const
   });
 
-  const handleAddChannel = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setActionLoading(prev => ({ ...prev, add: true }));
+  // Estados para conexão YouTube
+  const [connectingYouTube, setConnectingYouTube] = useState(false);
+
+  // Funções para Twitch
+  const handleAddTwitchChannel = async () => {
+    if (!newTwitchChannel.name.trim()) return;
+
+    const success = await addTwitchChannel({
+      ...newTwitchChannel,
+      name: newTwitchChannel.name.trim(),
+      url: newTwitchChannel.url || `https://twitch.tv/${newTwitchChannel.name.trim()}`
+    });
+
+    if (success) {
+      setNewTwitchChannel({ name: '', url: '', description: '', platform: 'twitch' });
+      setShowAddTwitchModal(false);
+    }
+  };
+
+  const handleRemoveTwitchChannel = async (channelId: number) => {
+    const success = await removeTwitchChannel(channelId);
+    if (success) {
+      setShowRemoveTwitchConfirm(null);
+    }
+  };
+
+  const handleTestTwitchChannel = async (channelId: number) => {
+    await testTwitchChannel(channelId);
+  };
+
+  // Funções para YouTube - Conexão Automática
+  const handleConnectYouTube = async () => {
+    setConnectingYouTube(true);
+    setShowConnectYouTubeModal(false);
     
     try {
-      const success = await addChannel(formData);
+      // Gerar um ID único para este canal baseado no timestamp
+      const channelId = `youtube_${Date.now()}`;
+      
+      // Simular o processo de autenticação OAuth
+      // Em uma implementação real, isso redirecionaria para OAuth do YouTube
+      const success = await addYouTubeChannel(channelId, `Canal YouTube ${channelId}`);
+      
       if (success) {
-        setSuccessMessage('Canal adicionado com sucesso!');
-        setShowAddForm(false);
-        setFormData({ name: '', platform: 'twitch', url: '', description: '' });
-        setTimeout(() => setSuccessMessage(null), 3000);
+        // Canal será adicionado automaticamente pelos hooks
       }
-    } catch (err) {
-      console.error('Error adding channel:', err);
+    } catch (error) {
+      console.error('Erro ao conectar canal YouTube:', error);
     } finally {
-      setActionLoading(prev => ({ ...prev, add: false }));
+      setConnectingYouTube(false);
     }
   };
 
-  const handleRemoveChannel = async (channelId: number) => {
-    setActionLoading(prev => ({ 
-      ...prev, 
-      remove: { ...prev.remove, [channelId]: true }
-    }));
-    
-    try {
-      const success = await removeChannel(channelId);
-      if (success) {
-        setSuccessMessage('Canal removido com sucesso!');
-        setTimeout(() => setSuccessMessage(null), 3000);
-      }
-    } catch (err) {
-      console.error('Error removing channel:', err);
-    } finally {
-      setActionLoading(prev => ({ 
-        ...prev, 
-        remove: { ...prev.remove, [channelId]: false }
-      }));
+  const handleSelectYouTubeChannel = async (channelId: string) => {
+    await selectYouTubeChannel(channelId);
+  };
+
+  const handleRemoveYouTubeChannel = async (channelId: string) => {
+    const success = await removeYouTubeChannel(channelId);
+    if (success) {
+      setShowRemoveYouTubeConfirm(null);
     }
   };
 
-  const handleTestChannel = async (channelId: number) => {
-    setActionLoading(prev => ({ 
-      ...prev, 
-      test: { ...prev.test, [channelId]: true }
-    }));
-    
-    try {
-      const result = await testChannel(channelId);
-      if (result) {
-        setTestResults(prev => ({ ...prev, [channelId]: result }));
-        setSuccessMessage(`Teste realizado: ${result.message}`);
-        setTimeout(() => {
-          setSuccessMessage(null);
-          setTestResults(prev => ({ ...prev, [channelId]: undefined }));
-        }, 5000);
-      }
-    } catch (err) {
-      console.error('Error testing channel:', err);
-    } finally {
-      setActionLoading(prev => ({ 
-        ...prev, 
-        test: { ...prev.test, [channelId]: false }
-      }));
-    }
-  };
-
-  const handleRefresh = async () => {
-    setActionLoading(prev => ({ ...prev, refresh: true }));
-    try {
-      refreshChannels();
-    } finally {
-      setActionLoading(prev => ({ ...prev, refresh: false }));
-    }
-  };
-
+  // Utilitários
   const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'active': return 'bg-green-900/30 text-green-400';
-      case 'inactive': return 'bg-gray-900/30 text-gray-400';
-      case 'error': return 'bg-red-900/30 text-red-400';
-      default: return 'bg-gray-900/30 text-gray-400';
-    }
+    const colors = {
+      'active': 'text-green-400',
+      'inactive': 'text-red-400',
+      'error': 'text-red-400',
+      'CONNECTED': 'text-green-400',
+      'NOT_AUTHENTICATED': 'text-yellow-400',
+      'NOT_CONFIGURED': 'text-red-400',
+      'EXPIRED': 'text-orange-400',
+      'ERROR': 'text-red-400'
+    };
+    return colors[status as keyof typeof colors] || 'text-gray-400';
   };
 
-  const getPlatformIcon = (platform: string) => {
-    if (platform === 'twitch') {
-      return (
-        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-          <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z"/>
-        </svg>
-      );
-    }
-    return (
-      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-        <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
-      </svg>
-    );
+  const getStatusText = (status: string) => {
+    const texts = {
+      'active': 'Ativo',
+      'inactive': 'Inativo',
+      'error': 'Erro',
+      'CONNECTED': 'Conectado',
+      'NOT_AUTHENTICATED': 'Não Autenticado',
+      'NOT_CONFIGURED': 'Não Configurado',
+      'EXPIRED': 'Expirado',
+      'ERROR': 'Erro'
+    };
+    return texts[status as keyof typeof texts] || status;
   };
+
+  const getStatusIcon = (status: string) => {
+    const icons = {
+      'active': '✅',
+      'inactive': '⚪',
+      'error': '❌',
+      'CONNECTED': '✅',
+      'NOT_AUTHENTICATED': '🔗',
+      'NOT_CONFIGURED': '⚙️',
+      'EXPIRED': '⏰',
+      'ERROR': '❌'
+    };
+    return icons[status as keyof typeof icons] || '❓';
+  };
+
+  const renderTwitchChannels = () => (
+    <div className="space-y-6">
+      {/* Header Twitch */}
+      <div className="flex flex-wrap justify-between gap-6">
+        <div className="flex min-w-72 flex-col gap-3">
+          <div className="flex flex-col gap-1">
+            <h2 className="text-white text-xl font-bold leading-tight">Canais Twitch Monitorados</h2>
+            <p className="text-[#a2abb3] text-base font-normal leading-normal">
+              Adicione canais da Twitch para baixar clips automaticamente
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-start gap-3">
+          <button
+            onClick={refreshTwitchChannels}
+            disabled={twitchLoading}
+            className="flex min-w-[100px] cursor-pointer items-center justify-center overflow-hidden rounded-xl h-10 px-4 bg-[#2c3135] text-white text-sm font-bold leading-normal tracking-[0.015em] disabled:opacity-50"
+          >
+            {twitchLoading ? 'Carregando...' : 'Atualizar'}
+          </button>
+          
+          <button
+            onClick={() => setShowAddTwitchModal(true)}
+            className="flex min-w-[140px] cursor-pointer items-center justify-center overflow-hidden rounded-xl h-10 px-4 bg-purple-600 text-white text-sm font-bold leading-normal tracking-[0.015em]"
+          >
+            ➕ Adicionar Canal Twitch
+          </button>
+        </div>
+      </div>
+
+      {/* Mensagens de erro Twitch */}
+      {twitchError && (
+        <div className="flex items-center gap-3 rounded-xl bg-red-900/20 border border-red-600/30 p-4">
+          <div className="text-red-400">⚠️</div>
+          <span className="text-red-300 text-sm">{twitchError}</span>
+        </div>
+      )}
+
+      {/* Lista de Canais Twitch */}
+      <div className="bg-[#1c1f22] border border-[#2c3135] rounded-xl overflow-hidden">
+        <div className="bg-[#2c3135] px-6 py-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-white text-lg font-bold">Canais Twitch</h3>
+            <span className="text-[#a2abb3] text-sm">
+              {twitchChannels.length} canais monitorados
+            </span>
+          </div>
+        </div>
+
+        {twitchLoading ? (
+          <div className="text-center py-12">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto"></div>
+            <p className="mt-2 text-[#a2abb3]">Carregando canais...</p>
+          </div>
+        ) : twitchChannels.length === 0 ? (
+          <div className="text-center py-12">
+            <div className="text-[#a2abb3] mb-4">
+              <svg className="mx-auto h-16 w-16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+              </svg>
+            </div>
+            <h3 className="text-lg font-medium text-white mb-2">Nenhum canal Twitch monitorado</h3>
+            <p className="text-[#a2abb3] mb-6">Adicione canais da Twitch para monitorar clips.</p>
+            <button
+              onClick={() => setShowAddTwitchModal(true)}
+              className="bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700 transition-colors font-medium"
+            >
+              ➕ Adicionar Primeiro Canal
+            </button>
+          </div>
+        ) : (
+          <div className="divide-y divide-[#2c3135]">
+            {twitchChannels.map((channel) => (
+              <div key={channel.id} className="p-6 hover:bg-[#2c3135]/30 transition-colors">
+                <div className="flex items-center gap-4">
+                  {/* Avatar/Icon */}
+                  <div className="flex-shrink-0">
+                    <div className="bg-purple-600 rounded-full h-16 w-16 flex items-center justify-center text-2xl">
+                      🎮
+                    </div>
+                  </div>
+
+                  {/* Informações do Canal */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-2">
+                      <h3 className="text-white font-bold text-lg">{channel.name}</h3>
+                      <span className={`text-sm font-medium ${getStatusColor(channel.status)}`}>
+                        {getStatusIcon(channel.status)} {getStatusText(channel.status)}
+                      </span>
+                    </div>
+                    
+                    <div className="text-[#a2abb3] text-sm mb-2">
+                      <a href={channel.url} target="_blank" rel="noopener noreferrer" className="hover:text-purple-400">
+                        {channel.url}
+                      </a>
+                    </div>
+                    
+                    {channel.description && (
+                      <div className="text-[#a2abb3] text-sm mb-2">
+                        {channel.description}
+                      </div>
+                    )}
+                    
+                    <div className="text-sm text-[#a2abb3]">
+                      <span className="font-medium">Último clip:</span> {
+                        channel.lastClipAt 
+                          ? new Date(channel.lastClipAt).toLocaleString() 
+                          : 'Nunca'
+                      }
+                    </div>
+                  </div>
+
+                  {/* Ações */}
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <button
+                      onClick={() => handleTestTwitchChannel(channel.id)}
+                      disabled={twitchLoading}
+                      className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                    >
+                      🔍 Testar
+                    </button>
+                    
+                    <button
+                      onClick={() => setShowRemoveTwitchConfirm(channel.id)}
+                      className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-red-700 transition-colors"
+                    >
+                      🗑️ Remover
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  const renderYouTubeChannels = () => (
+    <div className="space-y-6">
+      {/* Header YouTube */}
+      <div className="flex flex-wrap justify-between gap-6">
+        <div className="flex min-w-72 flex-col gap-3">
+          <div className="flex flex-col gap-1">
+            <h2 className="text-white text-xl font-bold leading-tight">Canais YouTube</h2>
+            <p className="text-[#a2abb3] text-base font-normal leading-normal">
+              Conecte e gerencie múltiplos canais YouTube para uploads
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-start gap-3">
+          <button
+            onClick={refreshYouTubeChannels}
+            disabled={youtubeLoading}
+            className="flex min-w-[100px] cursor-pointer items-center justify-center overflow-hidden rounded-xl h-10 px-4 bg-[#2c3135] text-white text-sm font-bold leading-normal tracking-[0.015em] disabled:opacity-50"
+          >
+            {youtubeLoading ? 'Carregando...' : 'Atualizar'}
+          </button>
+          
+          <button
+            onClick={() => setShowConnectYouTubeModal(true)}
+            disabled={connectingYouTube}
+            className="flex min-w-[140px] cursor-pointer items-center justify-center overflow-hidden rounded-xl h-10 px-4 bg-red-600 text-white text-sm font-bold leading-normal tracking-[0.015em] disabled:opacity-50"
+          >
+            {connectingYouTube ? 'Conectando...' : '➕ Conectar Canal YouTube'}
+          </button>
+        </div>
+      </div>
+
+      {/* Mensagens YouTube */}
+      {youtubeError && (
+        <div className="flex items-center gap-3 rounded-xl bg-red-900/20 border border-red-600/30 p-4">
+          <div className="text-red-400">⚠️</div>
+          <span className="text-red-300 text-sm">{youtubeError}</span>
+        </div>
+      )}
+
+      {successMessage && (
+        <div className="flex items-center gap-3 rounded-xl bg-green-900/20 border border-green-600/30 p-4">
+          <div className="text-green-400">✅</div>
+          <span className="text-green-300 text-sm">{successMessage}</span>
+        </div>
+      )}
+
+      {/* Estatísticas Gerais YouTube */}
+      {allChannelsStats && (
+        <div className="bg-[#1c1f22] border border-[#2c3135] rounded-xl p-6">
+          <h3 className="text-white text-lg font-bold mb-4">Resumo YouTube</h3>
+          
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <div className="bg-[#2c3135] rounded-lg p-4">
+              <div className="text-blue-400 text-2xl font-bold">{allChannelsStats.summary.totalChannels}</div>
+              <div className="text-[#a2abb3] text-sm">Canais Totais</div>
+              <div className="text-green-400 text-xs mt-1">
+                {getConnectedChannelsCount()} conectados
+              </div>
+            </div>
+            
+            <div className="bg-[#2c3135] rounded-lg p-4">
+              <div className="text-green-400 text-2xl font-bold">{formatNumber(allChannelsStats.summary.totalViews)}</div>
+              <div className="text-[#a2abb3] text-sm">Views Totais</div>
+            </div>
+            
+            <div className="bg-[#2c3135] rounded-lg p-4">
+              <div className="text-red-400 text-2xl font-bold">{formatNumber(allChannelsStats.summary.totalLikes)}</div>
+              <div className="text-[#a2abb3] text-sm">Likes Totais</div>
+            </div>
+            
+            <div className="bg-[#2c3135] rounded-lg p-4">
+              <div className="text-yellow-400 text-2xl font-bold">{formatNumber(allChannelsStats.summary.totalComments)}</div>
+              <div className="text-[#a2abb3] text-sm">Comentários</div>
+            </div>
+            
+            <div className="bg-[#2c3135] rounded-lg p-4">
+              <div className="text-purple-400 text-2xl font-bold">{allChannelsStats.summary.totalVideos}</div>
+              <div className="text-[#a2abb3] text-sm">Vídeos Totais</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Lista de Canais YouTube */}
+      <div className="bg-[#1c1f22] border border-[#2c3135] rounded-xl overflow-hidden">
+        <div className="bg-[#2c3135] px-6 py-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-white text-lg font-bold">Canais YouTube Conectados</h3>
+            <span className="text-[#a2abb3] text-sm">
+              {youtubeChannels.length} canais • {getConnectedChannelsCount()} conectados
+            </span>
+          </div>
+        </div>
+
+        {youtubeLoading ? (
+          <div className="text-center py-12">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto"></div>
+            <p className="mt-2 text-[#a2abb3]">Carregando canais...</p>
+          </div>
+        ) : !hasYouTubeChannels() ? (
+          <div className="text-center py-12">
+            <div className="text-[#a2abb3] mb-4">
+              <svg className="mx-auto h-16 w-16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+              </svg>
+            </div>
+            <h3 className="text-lg font-medium text-white mb-2">Nenhum canal YouTube conectado</h3>
+            <p className="text-[#a2abb3] mb-6">Conecte seu primeiro canal YouTube para começar uploads.</p>
+            <button
+              onClick={() => setShowConnectYouTubeModal(true)}
+              className="bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 transition-colors font-medium"
+            >
+              ➕ Conectar Primeiro Canal
+            </button>
+          </div>
+        ) : (
+          <div className="divide-y divide-[#2c3135]">
+            {youtubeChannels.map((channel) => {
+              const stats = getChannelStats(channel.userId);
+              const isActive = channel.userId === activeChannelId;
+              const isPolling = isChannelPolling(channel.userId);
+              const isRemoving = youtubeRemoving === channel.userId;
+
+              return (
+                <div key={channel.userId} className="p-6 hover:bg-[#2c3135]/30 transition-colors">
+                  <div className="flex items-center gap-4">
+                    {/* Status Icon */}
+                    <div className="flex-shrink-0">
+                      <div className="bg-red-600 rounded-full h-16 w-16 flex items-center justify-center text-2xl relative">
+                        {getStatusIcon(channel.connectionStatus)}
+                        {isPolling && (
+                          <div className="absolute -bottom-1 -right-1">
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-yellow-400"></div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Informações do Canal */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-2">
+                        <h3 className="text-white font-bold text-lg">{channel.channelName}</h3>
+                        {isActive && (
+                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-900/30 text-blue-400">
+                            ✅ ATIVO
+                          </span>
+                        )}
+                        {isPolling && (
+                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-900/30 text-yellow-400">
+                            🔄 Conectando...
+                          </span>
+                        )}
+                      </div>
+                      
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className={`text-sm font-medium ${getStatusColor(channel.connectionStatus)}`}>
+                          {getStatusText(channel.connectionStatus)}
+                        </span>
+                        <span className="text-[#a2abb3] text-sm">•</span>
+                        <span className="text-[#a2abb3] text-sm">ID: {channel.userId}</span>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-[#a2abb3] mb-2">
+                        <div>
+                          <span className="font-medium">Vídeos:</span> {channel.videoCount}
+                        </div>
+                        <div>
+                          <span className="font-medium">Inscritos:</span> {channel.subscriberCount}
+                        </div>
+                        {stats && (
+                          <>
+                            <div>
+                              <span className="font-medium">Views:</span> {formatNumber(stats.views)}
+                            </div>
+                            <div>
+                              <span className="font-medium">Likes:</span> {formatNumber(stats.likes)}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                      
+                      {channel.lastUsed && (
+                        <div className="text-sm text-[#a2abb3]">
+                          <span className="font-medium">Último uso:</span> {new Date(channel.lastUsed).toLocaleString()}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Ações */}
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {channel.connectionStatus === 'CONNECTED' && !isActive && (
+                        <button
+                          onClick={() => handleSelectYouTubeChannel(channel.userId)}
+                          disabled={youtubeSelecting}
+                          className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                        >
+                          {youtubeSelecting ? 'Selecionando...' : '🎯 Selecionar'}
+                        </button>
+                      )}
+                      
+                      <button
+                        onClick={() => setShowRemoveYouTubeConfirm(channel.userId)}
+                        disabled={isRemoving || isPolling}
+                        className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-red-700 disabled:opacity-50 transition-colors"
+                      >
+                        {isRemoving ? 'Removendo...' : '🗑️ Remover'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 
   return (
     <div className="relative flex size-full min-h-screen flex-col bg-[#121416] group/design-root overflow-x-hidden">
@@ -141,244 +528,218 @@ export default function ChannelsPage() {
 
           {/* Main Content */}
           <div className="layout-content-container flex flex-col flex-1">
-            {/* Main Content Area */}
             <div className="flex flex-col bg-[#121416] p-8 flex-1 overflow-y-auto">
-              {/* Header */}
-              <div className="flex flex-wrap justify-between gap-3 mb-6">
+              {/* Header Geral */}
+              <div className="flex flex-wrap justify-between gap-6 mb-6">
                 <div className="flex min-w-72 flex-col gap-3">
                   <div className="flex flex-col gap-1">
-                    <h1 className="text-white text-2xl font-bold leading-tight">Canais</h1>
-                    <p className="text-[#a2abb3] text-base font-normal leading-normal">Gerencie os canais dos quais você extrai clipes</p>
+                    <h1 className="text-white text-2xl font-bold leading-tight">Gerenciar Canais</h1>
+                    <p className="text-[#a2abb3] text-base font-normal leading-normal">
+                      Conecte canais da Twitch para monitoramento e canais YouTube para upload
+                    </p>
                   </div>
-                  
-                  <div className="flex gap-3">
-                    <button
-                      onClick={handleRefresh}
-                      disabled={actionLoading.refresh}
-                      className="flex min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-xl h-10 px-4 bg-[#2c3135] text-white text-sm font-bold leading-normal tracking-[0.015em] disabled:opacity-50"
-                    >
-                      <span className="truncate">
-                        {actionLoading.refresh ? 'Atualizando...' : 'Atualizar'}
-                      </span>
-                    </button>
-                    <button
-                      onClick={() => setShowAddForm(true)}
-                      className="flex min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-xl h-10 px-4 bg-[#2884e6] text-white text-sm font-bold leading-normal tracking-[0.015em]"
-                    >
-                      <span className="truncate">Adicionar Canal</span>
-                    </button>
-                  </div>
-
-                  {/* Messages */}
-                  {error && (
-                    <div className="flex items-center gap-3 rounded-xl bg-red-900/20 border border-red-600/30 p-4">
-                      <div className="text-red-400">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 256 256">
-                          <path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216ZM116,96v64a12,12,0,0,0,24,0V96a12,12,0,0,0-24,0Z"/>
-                        </svg>
-                      </div>
-                      <span className="text-red-300 text-sm">{error}</span>
-                    </div>
-                  )}
-
-                  {successMessage && (
-                    <div className="flex items-center gap-3 rounded-xl bg-green-900/20 border border-green-600/30 p-4">
-                      <div className="text-green-400">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 256 256">
-                          <path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm45.66,85.66l-56,56a8,8,0,0,1-11.32,0l-24-24a8,8,0,0,1,11.32-11.32L112,148.69l50.34-50.35a8,8,0,0,1,11.32,11.32Z"/>
-                        </svg>
-                      </div>
-                      <span className="text-green-300 text-sm">{successMessage}</span>
-                    </div>
-                  )}
                 </div>
               </div>
 
-              {/* Add Channel Modal */}
-              {showAddForm && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                  <div className="bg-[#1c1f22] rounded-lg p-6 w-full max-w-md border border-[#2c3135]">
-                    <h3 className="text-lg font-semibold mb-4 text-white">Adicionar Novo Canal</h3>
-                    
-                    <form onSubmit={handleAddChannel} className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-white mb-2">
-                          Nome do Canal
-                        </label>
-                        <input
-                          type="text"
-                          required
-                          value={formData.name}
-                          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                          className="w-full bg-[#2c3135] border border-[#4a5568] rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#2884e6]"
-                          placeholder="Ex: shroud, xQc, etc."
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-white mb-2">
-                          Plataforma
-                        </label>
-                        <select
-                          value={formData.platform}
-                          onChange={(e) => setFormData({ ...formData, platform: e.target.value as 'twitch' | 'youtube' })}
-                          className="w-full bg-[#2c3135] border border-[#4a5568] rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#2884e6]"
-                        >
-                          <option value="twitch">Twitch</option>
-                          <option value="youtube">YouTube</option>
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-white mb-2">
-                          URL do Canal
-                        </label>
-                        <input
-                          type="url"
-                          required
-                          value={formData.url}
-                          onChange={(e) => setFormData({ ...formData, url: e.target.value })}
-                          className="w-full bg-[#2c3135] border border-[#4a5568] rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#2884e6]"
-                          placeholder="https://twitch.tv/nome-do-canal"
-                        />
-                      </div>
-
-                      <div className="flex gap-3 pt-4">
-                        <button
-                          type="button"
-                          onClick={() => setShowAddForm(false)}
-                          className="flex-1 bg-[#2c3135] text-[#a2abb3] px-4 py-2 rounded-lg hover:bg-[#3c4147] transition-colors"
-                        >
-                          Cancelar
-                        </button>
-                        <button
-                          type="submit"
-                          disabled={actionLoading.add}
-                          className="flex-1 bg-[#2884e6] text-white px-4 py-2 rounded-lg hover:bg-[#2672cc] transition-colors disabled:opacity-50"
-                        >
-                          {actionLoading.add ? 'Adicionando...' : 'Adicionar'}
-                        </button>
-                      </div>
-                    </form>
-                  </div>
+              {/* Tabs para Twitch e YouTube */}
+              <div className="mb-6">
+                <div className="border-b border-[#2c3135]">
+                  <nav className="-mb-px flex space-x-8">
+                    <button
+                      onClick={() => setActiveTab('twitch')}
+                      className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${
+                        activeTab === 'twitch'
+                          ? 'border-purple-500 text-purple-400'
+                          : 'border-transparent text-[#a2abb3] hover:text-white hover:border-[#a2abb3]'
+                      }`}
+                    >
+                      🎮 Canais Twitch ({twitchChannels.length})
+                    </button>
+                    <button
+                      onClick={() => setActiveTab('youtube')}
+                      className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${
+                        activeTab === 'youtube'
+                          ? 'border-red-500 text-red-400'
+                          : 'border-transparent text-[#a2abb3] hover:text-white hover:border-[#a2abb3]'
+                      }`}
+                    >
+                      📺 Canais YouTube ({youtubeChannels.length})
+                    </button>
+                  </nav>
                 </div>
-              )}
+              </div>
 
-              {/* Channels List */}
-              {loading ? (
-                <div className="flex min-h-[180px] flex-col gap-8 rounded-xl bg-[#1c1f22] p-4">
-                  <div className="text-center py-4">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto"></div>
-                    <p className="mt-2 text-[#a2abb3]">Carregando canais...</p>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex min-h-[180px] flex-col gap-8 rounded-xl bg-[#1c1f22] p-4">
-                  {channels.length === 0 ? (
-                    <div className="text-center py-8">
-                      <div className="text-[#a2abb3] mb-4">
-                        <svg className="mx-auto h-16 w-16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M7 4V2a1 1 0 011-1h8a1 1 0 011 1v2h4a1 1 0 011 1v1a1 1 0 01-1 1h-1v10a2 2 0 01-2 2H6a2 2 0 01-2-2V7H3a1 1 0 01-1-1V5a1 1 0 011-1h4zM9 3v1h6V3H9zm7 4H8v10h8V7z"/>
-                        </svg>
-                      </div>
-                      <h3 className="text-lg font-medium text-white mb-2">Nenhum canal encontrado</h3>
-                      <p className="text-[#a2abb3] mb-6">Comece adicionando seu primeiro canal para extrair clipes.</p>
-                      <button
-                        onClick={() => setShowAddForm(true)}
-                        className="bg-[#2884e6] text-white px-6 py-2 rounded-lg hover:bg-[#2672cc] transition-colors"
-                      >
-                        Adicionar Primeiro Canal
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="px-6 py-4 border-b border-[#2c3135]">
-                        <h3 className="text-lg font-medium text-white">
-                          {channels.length} {channels.length === 1 ? 'canal' : 'canais'} cadastrado{channels.length !== 1 ? 's' : ''}
-                        </h3>
-                      </div>
-                      
-                      <div className="divide-y divide-[#2c3135]">
-                        {channels.map((channel) => (
-                          <div key={channel.id} className="p-6 flex items-center justify-between">
-                            <div className="flex items-center space-x-4">
-                              <div className="flex-shrink-0">
-                                <div className={`p-2 rounded-lg ${
-                                  channel.platform === 'twitch' ? 'bg-purple-900/20 text-purple-400' : 'bg-red-900/20 text-red-400'
-                                }`}>
-                                  {getPlatformIcon(channel.platform)}
-                                </div>
-                              </div>
-                              
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center space-x-2">
-                                  <h4 className="text-lg font-medium text-white truncate">
-                                    {channel.name}
-                                  </h4>
-                                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(channel.status)}`}>
-                                    {channel.status}
-                                  </span>
-                                </div>
-                                
-                                <div className="mt-1 flex items-center space-x-4 text-sm text-[#a2abb3]">
-                                  <span className="capitalize">{channel.platform}</span>
-                                  {channel.lastClipAt && (
-                                    <span>Último clip: {new Date(channel.lastClipAt).toLocaleDateString()}</span>
-                                  )}
-                                </div>
-                                
-                                <div className="mt-1">
-                                  <a
-                                    href={channel.url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-[#2884e6] hover:text-[#4a9eff] text-sm truncate max-w-xs inline-block"
-                                  >
-                                    {channel.url}
-                                  </a>
-                                </div>
-
-                                {testResults[channel.id] && (
-                                  <div className="mt-2 p-2 bg-green-900/20 border border-green-600/30 rounded text-sm">
-                                    <p className="text-green-300">
-                                      ✓ {testResults[channel.id]?.message}
-                                    </p>
-                                    <p className="text-green-400">
-                                      {testResults[channel.id]?.clips} clips encontrados • {testResults[channel.id]?.responseTime}ms
-                                    </p>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                            
-                            <div className="flex items-center space-x-2">
-                              <button
-                                onClick={() => handleTestChannel(channel.id)}
-                                disabled={actionLoading.test[channel.id]}
-                                className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 transition-colors disabled:opacity-50"
-                              >
-                                {actionLoading.test[channel.id] ? 'Testando...' : 'Testar'}
-                              </button>
-                              
-                              <button
-                                onClick={() => handleRemoveChannel(channel.id)}
-                                disabled={actionLoading.remove[channel.id]}
-                                className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700 transition-colors disabled:opacity-50"
-                              >
-                                {actionLoading.remove[channel.id] ? 'Removendo...' : 'Remover'}
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </>
-                  )}
-                </div>
-              )}
+              {/* Conteúdo das Tabs */}
+              {activeTab === 'twitch' ? renderTwitchChannels() : renderYouTubeChannels()}
             </div>
           </div>
         </div>
       </div>
+
+      {/* Modal para Adicionar Canal Twitch */}
+      {showAddTwitchModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-[#1c1f22] rounded-lg p-6 w-full max-w-md border border-[#2c3135]">
+            <h3 className="text-lg font-semibold mb-4 text-white">Adicionar Canal Twitch</h3>
+            
+            <div className="space-y-4 mb-6">
+              <div>
+                <label className="block text-sm font-medium text-[#a2abb3] mb-2">
+                  Nome do Canal *
+                </label>
+                <input
+                  type="text"
+                  value={newTwitchChannel.name}
+                  onChange={(e) => setNewTwitchChannel({...newTwitchChannel, name: e.target.value})}
+                  placeholder="Ex: gaules, loud_coringa"
+                  className="w-full px-3 py-2 bg-[#2c3135] border border-[#2c3135] rounded-lg text-white placeholder-[#a2abb3] focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  required
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-[#a2abb3] mb-2">
+                  URL (opcional)
+                </label>
+                <input
+                  type="text"
+                  value={newTwitchChannel.url}
+                  onChange={(e) => setNewTwitchChannel({...newTwitchChannel, url: e.target.value})}
+                  placeholder="https://twitch.tv/gaules"
+                  className="w-full px-3 py-2 bg-[#2c3135] border border-[#2c3135] rounded-lg text-white placeholder-[#a2abb3] focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-[#a2abb3] mb-2">
+                  Descrição (opcional)
+                </label>
+                <input
+                  type="text"
+                  value={newTwitchChannel.description}
+                  onChange={(e) => setNewTwitchChannel({...newTwitchChannel, description: e.target.value})}
+                  placeholder="Canal de jogos CS2"
+                  className="w-full px-3 py-2 bg-[#2c3135] border border-[#2c3135] rounded-lg text-white placeholder-[#a2abb3] focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+            </div>
+            
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowAddTwitchModal(false);
+                  setNewTwitchChannel({ name: '', url: '', description: '', platform: 'twitch' });
+                }}
+                className="flex-1 bg-[#2c3135] text-[#a2abb3] px-4 py-2 rounded-lg hover:bg-[#3c4147] transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleAddTwitchChannel}
+                disabled={!newTwitchChannel.name.trim() || twitchLoading}
+                className="flex-1 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50"
+              >
+                {twitchLoading ? 'Adicionando...' : '🎮 Adicionar Canal'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal para Conectar Canal YouTube */}
+      {showConnectYouTubeModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-[#1c1f22] rounded-lg p-6 w-full max-w-md border border-[#2c3135]">
+            <h3 className="text-lg font-semibold mb-4 text-white">Conectar Canal YouTube</h3>
+            
+            <p className="text-[#a2abb3] mb-6">
+              Tem certeza que deseja conectar um novo canal YouTube?
+              <br />
+              <span className="text-sm">Esta ação não pode ser desfeita.</span>
+            </p>
+            
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowConnectYouTubeModal(false)}
+                className="flex-1 bg-[#2c3135] text-[#a2abb3] px-4 py-2 rounded-lg hover:bg-[#3c4147] transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleConnectYouTube}
+                disabled={connectingYouTube}
+                className="flex-1 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
+              >
+                {connectingYouTube ? 'Conectando...' : '🎯 Conectar Canal'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Confirmação de Remoção Twitch */}
+      {showRemoveTwitchConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-[#1c1f22] rounded-lg p-6 w-full max-w-md border border-[#2c3135]">
+            <h3 className="text-lg font-semibold mb-4 text-white">Confirmar Remoção</h3>
+            
+            <p className="text-[#a2abb3] mb-6">
+              Tem certeza que deseja remover o canal Twitch <strong className="text-white">
+                {twitchChannels.find(c => c.id === showRemoveTwitchConfirm)?.name}
+              </strong>?
+              <br />
+              <span className="text-sm">Esta ação não pode ser desfeita.</span>
+            </p>
+            
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowRemoveTwitchConfirm(null)}
+                className="flex-1 bg-[#2c3135] text-[#a2abb3] px-4 py-2 rounded-lg hover:bg-[#3c4147] transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => handleRemoveTwitchChannel(showRemoveTwitchConfirm)}
+                disabled={twitchLoading}
+                className="flex-1 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
+              >
+                {twitchLoading ? 'Removendo...' : '🗑️ Remover'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Confirmação de Remoção YouTube */}
+      {showRemoveYouTubeConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-[#1c1f22] rounded-lg p-6 w-full max-w-md border border-[#2c3135]">
+            <h3 className="text-lg font-semibold mb-4 text-white">Confirmar Remoção</h3>
+            
+            <p className="text-[#a2abb3] mb-6">
+              Tem certeza que deseja remover o canal YouTube <strong className="text-white">{getChannelById(showRemoveYouTubeConfirm)?.channelName}</strong>?
+              <br />
+              <span className="text-sm">Esta ação não pode ser desfeita.</span>
+            </p>
+            
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowRemoveYouTubeConfirm(null)}
+                className="flex-1 bg-[#2c3135] text-[#a2abb3] px-4 py-2 rounded-lg hover:bg-[#3c4147] transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => handleRemoveYouTubeChannel(showRemoveYouTubeConfirm)}
+                disabled={youtubeRemoving === showRemoveYouTubeConfirm}
+                className="flex-1 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
+              >
+                {youtubeRemoving === showRemoveYouTubeConfirm ? 'Removendo...' : '🗑️ Remover'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 } 

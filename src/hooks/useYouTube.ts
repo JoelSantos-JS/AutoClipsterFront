@@ -13,7 +13,7 @@ export const useYouTube = () => {
     setLoading(true);
     setError(null);
     try {
-      const youtubeStats = await apiClient.get<YouTubeStats>('/api/youtube/stats');
+      const youtubeStats = await apiClient.get<YouTubeStats>('/api/shorts/stats');
       setStats(youtubeStats);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch YouTube stats');
@@ -26,7 +26,7 @@ export const useYouTube = () => {
     setLoading(true);
     setError(null);
     try {
-      const youtubeVideos = await apiClient.get<YouTubeVideo[]>('/api/youtube/videos');
+      const youtubeVideos = await apiClient.get<YouTubeVideo[]>('/api/shorts/');
       setVideos(youtubeVideos);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch YouTube videos');
@@ -37,7 +37,7 @@ export const useYouTube = () => {
 
   const fetchAuthStatus = useCallback(async () => {
     try {
-      const status = await apiClient.get<YouTubeAuthStatus>('/api/youtube/auth/status');
+      const status = await apiClient.get<YouTubeAuthStatus>('/api/shorts/auth/status');
       setAuthStatus(status);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch YouTube auth status');
@@ -48,7 +48,7 @@ export const useYouTube = () => {
     setLoading(true);
     setError(null);
     try {
-      const result = await apiClient.post('/api/youtube/upload', {
+      const result = await apiClient.post('/api/shorts/upload', {
         clipId,
         ...metadata
       });
@@ -66,7 +66,7 @@ export const useYouTube = () => {
     setLoading(true);
     setError(null);
     try {
-      await apiClient.delete(`/api/youtube/videos/${videoId}`);
+      await apiClient.delete(`/api/shorts/videos/${videoId}`);
       setVideos(prev => prev.filter(video => video.id !== videoId));
       await fetchStats(); // Refresh stats after deletion
       return true;
