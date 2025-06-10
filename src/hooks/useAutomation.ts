@@ -1,109 +1,172 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { workflowsService } from '../services';
-import { WorkflowRequest, WorkflowResult, AutomationStatus, RetryResult } from '../types';
+import { useState, useEffect, useCallback } from 'react';
+import { automationService, AutomationStatus, ExecuteWorkflowRequest } from '../services/automation';
 
-export const useAutomation = () => {
+export interface UseAutomationReturn {
+  // Estado
+  status: AutomationStatus | null;
+  isLoading: boolean;
+  error: string | null;
+  
+  // Funções
+  loadStatus: () => Promise<void>;
+  processClips: () => Promise<void>;
+  retryFailedClips: () => Promise<void>;
+  cleanupOldClips: (options?: { olderThanDays?: number; keepSuccessful?: boolean; dryRun?: boolean }) => Promise<void>;
+  executeWorkflow: (config?: Partial<ExecuteWorkflowRequest>) => Promise<void>;
+  
+  // Estados de carregamento específicos
+  processingLoading: boolean;
+  retryLoading: boolean;
+  cleanupLoading: boolean;
+  workflowLoading: boolean;
+}
+
+export const useAutomation = (): UseAutomationReturn => {
   const [status, setStatus] = useState<AutomationStatus | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isPolling, setIsPolling] = useState(false);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Estados de carregamento específicos
+  const [processingLoading, setProcessingLoading] = useState(false);
+  const [retryLoading, setRetryLoading] = useState(false);
+  const [cleanupLoading, setCleanupLoading] = useState(false);
+  const [workflowLoading, setWorkflowLoading] = useState(false);
 
-  const fetchStatus = useCallback(async () => {
+  // Carregar status da automação
+  const loadStatus = useCallback(async () => {
     try {
-      const automationStatus = await workflowsService.getAutomationStatus();
-      setStatus(automationStatus);
+      setIsLoading(true);
       setError(null);
+      console.log('🔄 Carregando status da automação...');
+      
+      const automationStatus = await automationService.getAutomationStatus();
+      setStatus(automationStatus);
+      
+      console.log('✅ Status da automação carregado:', automationStatus);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch automation status');
+      const errorMessage = err instanceof Error ? err.message : 'Erro desconhecido';
+      console.error('❌ Erro ao carregar status da automação:', errorMessage);
+      setError(errorMessage);
+    } finally {
+      setIsLoading(false);
     }
   }, []);
 
-  const executeWorkflow = useCallback(async (request: WorkflowRequest): Promise<WorkflowResult | null> => {
-    setLoading(true);
-    setError(null);
+  // Processar clips pendentes
+  const processClips = useCallback(async () => {
     try {
-      const result = await workflowsService.executeWorkflow(request);
-      await fetchStatus(); // Refresh status after execution
-      return result;
+      setProcessingLoading(true);
+      setError(null);
+      console.log('🔄 Iniciando processamento de clips...');
+      
+      const result = await automationService.processPendingClips();
+      console.log('✅ Processamento iniciado:', result);
+      
+      // Recarregar status após processar
+      await loadStatus();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to execute workflow');
-      return null;
+      const errorMessage = err instanceof Error ? err.message : 'Erro ao processar clips';
+      console.error('❌ Erro ao processar clips:', errorMessage);
+      setError(errorMessage);
     } finally {
-      setLoading(false);
+      setProcessingLoading(false);
     }
-  }, [fetchStatus]);
+  }, [loadStatus]);
 
-  const retryFailed = useCallback(async (): Promise<RetryResult | null> => {
-    setLoading(true);
-    setError(null);
+  // Reprocessar clips falhados
+  const retryFailedClips = useCallback(async () => {
     try {
-      const result = await workflowsService.retryFailedWorkflows();
-      await fetchStatus(); // Refresh status after retry
-      return result;
+      setRetryLoading(true);
+      setError(null);
+      console.log('🔄 Reprocessando clips falhados...');
+      
+      const result = await automationService.retryFailedClips();
+      console.log('✅ Reprocessamento iniciado:', result);
+      
+      // Recarregar status após retry
+      await loadStatus();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to retry failed workflows');
-      return null;
+      const errorMessage = err instanceof Error ? err.message : 'Erro ao reprocessar clips';
+      console.error('❌ Erro ao reprocessar clips:', errorMessage);
+      setError(errorMessage);
     } finally {
-      setLoading(false);
+      setRetryLoading(false);
     }
-  }, [fetchStatus]);
+  }, [loadStatus]);
 
-  const testAutomation = useCallback(async (): Promise<boolean> => {
-    setLoading(true);
-    setError(null);
+  // Limpar clips antigos
+  const cleanupOldClips = useCallback(async (options: { olderThanDays?: number; keepSuccessful?: boolean; dryRun?: boolean } = {}) => {
     try {
-      await workflowsService.testAutomation();
-      await fetchStatus(); // Refresh status after test
-      return true;
+      setCleanupLoading(true);
+      setError(null);
+      console.log('🧹 Iniciando limpeza de clips...', options);
+      
+      const result = await automationService.cleanupOldClips({
+        olderThanDays: options.olderThanDays || 30,
+        keepSuccessful: options.keepSuccessful !== false,
+        dryRun: options.dryRun || false
+      });
+      
+      console.log('✅ Limpeza concluída:', result);
+      
+      // Recarregar status após limpeza
+      await loadStatus();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to test automation');
-      return false;
+      const errorMessage = err instanceof Error ? err.message : 'Erro ao limpar clips';
+      console.error('❌ Erro ao limpar clips:', errorMessage);
+      setError(errorMessage);
     } finally {
-      setLoading(false);
+      setCleanupLoading(false);
     }
-  }, [fetchStatus]);
+  }, [loadStatus]);
 
-  const startPolling = useCallback(() => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
+  // Executar workflow personalizado
+  const executeWorkflow = useCallback(async (config: Partial<ExecuteWorkflowRequest> = {}) => {
+    try {
+      setWorkflowLoading(true);
+      setError(null);
+      console.log('🔄 Executando workflow personalizado...', config);
+      
+      const workflowRequest: ExecuteWorkflowRequest = {
+        channelName: config.channelName || 'default',
+        clipLimit: config.clipLimit || 10,
+        daysBack: config.daysBack || 1,
+        forceDownload: config.forceDownload || false,
+        autoUpload: config.autoUpload || false,
+        customFilters: config.customFilters || {}
+      };
+      
+      const result = await automationService.executeWorkflow(workflowRequest);
+      console.log('✅ Workflow executado:', result);
+      
+      // Recarregar status após executar workflow
+      await loadStatus();
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Erro ao executar workflow';
+      console.error('❌ Erro ao executar workflow:', errorMessage);
+      setError(errorMessage);
+    } finally {
+      setWorkflowLoading(false);
     }
-    
-    setIsPolling(true);
-    intervalRef.current = setInterval(() => {
-      fetchStatus();
-    }, 5000); // Poll every 5 seconds
-  }, [fetchStatus]);
+  }, [loadStatus]);
 
-  const stopPolling = useCallback(() => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-    setIsPolling(false);
-  }, []);
-
+  // Carregar status inicial
   useEffect(() => {
-    // Initial fetch
-    fetchStatus();
-
-    // Cleanup on unmount
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-    };
-  }, [fetchStatus]);
+    loadStatus();
+  }, [loadStatus]);
 
   return {
     status,
-    loading,
+    isLoading,
     error,
+    loadStatus,
+    processClips,
+    retryFailedClips,
+    cleanupOldClips,
     executeWorkflow,
-    retryFailed,
-    testAutomation,
-    startPolling,
-    stopPolling,
-    isPolling
+    processingLoading,
+    retryLoading,
+    cleanupLoading,
+    workflowLoading
   };
 }; 

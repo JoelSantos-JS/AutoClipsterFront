@@ -5,119 +5,91 @@ import { useAutomation } from '../../hooks/useAutomation';
 import Sidebar from "../../components/Sidebar";
 
 export default function WorkflowsPage() {
-  const { 
-    status, 
-    executeWorkflow, 
-    retryFailed, 
-    testAutomation,
-    startPolling, 
-    stopPolling
+  const {
+    status,
+    isLoading,
+    loadStatus,
+    processClips,
+    retryFailedClips,
+    executeWorkflow
   } = useAutomation();
   
-  const [formData, setFormData] = useState({
-    channelName: '',
-    clipLimit: 10,
-    daysBack: 7
-  });
-  const [executing, setExecuting] = useState(false);
-  const [testing, setTesting] = useState(false);
-  const [activeTab, setActiveTab] = useState('execute');
+  const [channelName, setChannelName] = useState("");
+  const [clipLimit, setClipLimit] = useState(10);
+  const [daysBack, setDaysBack] = useState(1);
+  const [isAutomationEnabled, setIsAutomationEnabled] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [isAutomationEnabled, setIsAutomationEnabled] = useState(false); // Desativado por padrão
-  const [scheduledWorkflows] = useState([
-    {
-      id: 1,
-      name: 'Daily Highlights',
-      channel: 'gaules',
-      schedule: 'Daily at 18:00',
-      status: 'active',
-      nextRun: '2024-01-15 18:00'
-    },
-    {
-      id: 2,
-      name: 'Weekend Compilation',
-      channel: 'loud_coringa',
-      schedule: 'Weekly on Sundays',
-      status: 'paused',
-      nextRun: '2024-01-21 10:00'
-    }
-  ]);
 
-  // Não iniciar polling automaticamente
+  // Auto-refresh status every 30 seconds when automation is enabled
   useEffect(() => {
     if (isAutomationEnabled) {
-      startPolling();
-    } else {
-      stopPolling();
+      const interval = setInterval(() => {
+        loadStatus();
+      }, 30000);
+      
+      return () => clearInterval(interval);
     }
-    
-    return () => stopPolling();
-  }, [isAutomationEnabled, startPolling, stopPolling]);
+  }, [isAutomationEnabled, loadStatus]);
+
+  // Load initial status
+  useEffect(() => {
+    loadStatus();
+  }, [loadStatus]);
 
   const handleExecuteWorkflow = async () => {
-    if (!formData.channelName.trim()) {
-      setError('Channel name is required');
+    if (!channelName.trim()) {
+      setError("Nome do canal é obrigatório");
       return;
     }
 
+    setError(null);
+    setSuccess(null);
+
     try {
-      setExecuting(true);
-      setError(null);
-      setSuccess(null);
-      
-      const result = await executeWorkflow(formData);
-      
-      if (result) {
-        setSuccess(`Workflow started successfully for channel: ${formData.channelName}`);
-        // Reset form
-        setFormData({
-          channelName: '',
-          clipLimit: 10,
-          daysBack: 7
-        });
-      }
+      await executeWorkflow({
+        channelName: channelName.trim(),
+        clipLimit,
+        daysBack,
+        forceDownload: false,
+        autoUpload: false
+      });
+      setSuccess("Workflow executado com sucesso!");
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to execute workflow');
-    } finally {
-      setExecuting(false);
+      setError(err instanceof Error ? err.message : "Erro ao executar workflow");
     }
   };
 
   const handleRetryFailed = async () => {
+    setError(null);
+    setSuccess(null);
+
     try {
-      setExecuting(true);
-      setError(null);
-      
-      await retryFailed();
-      setSuccess('Retry initiated for failed workflows');
+      await retryFailedClips();
+      setSuccess("Reprocessamento de clips iniciado!");
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to retry workflows');
-    } finally {
-      setExecuting(false);
+      setError(err instanceof Error ? err.message : "Erro ao reprocessar clips");
     }
   };
 
   const handleTestAutomation = async () => {
+    setError(null);
+    setSuccess(null);
+
     try {
-      setTesting(true);
-      setError(null);
-      
-      await testAutomation();
-      setSuccess('Automation test completed successfully');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Automation test failed');
-    } finally {
-      setTesting(false);
+      await processClips();
+      setSuccess("Teste de automação concluído com sucesso");
+    } catch {
+      setError('Erro ao testar automação')
     }
   };
 
   const toggleAutomation = () => {
     setIsAutomationEnabled(!isAutomationEnabled);
     if (!isAutomationEnabled) {
-      setSuccess('Automation enabled successfully');
+      setSuccess("Automação habilitada");
     } else {
-      setSuccess('Automation disabled successfully');
+      setSuccess("Automação desabilitada");
     }
     setTimeout(() => setSuccess(null), 3000);
   };
@@ -236,235 +208,264 @@ export default function WorkflowsPage() {
                 </div>
                 
                 {/* Status Details */}
-                {status && (
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-                    <div className="text-center">
-                      <div className="text-lg font-bold text-white">{status.totalClipsDownloaded}</div>
-                      <div className="text-[#a2abb3] text-xs">Downloaded</div>
+                {isLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="text-[#a2abb3]">Carregando status...</div>
+                  </div>
+                ) : status ? (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[#a2abb3]">Status:</span>
+                      <span className={`font-medium ${status.isRunning ? 'text-green-400' : 'text-yellow-400'}`}>
+                        {status.isRunning ? 'Executando' : 'Parado'}
+                      </span>
                     </div>
-                    <div className="text-center">
-                      <div className="text-lg font-bold text-white">{status.totalClipsProcessed}</div>
-                      <div className="text-[#a2abb3] text-xs">Processed</div>
+                    
+                    <div className="flex items-center justify-between">
+                      <span className="text-[#a2abb3]">Progresso:</span>
+                      <span className="text-white font-medium">{status.progress}%</span>
                     </div>
-                    <div className="text-center">
-                      <div className="text-lg font-bold text-white">{status.totalClipsPending}</div>
-                      <div className="text-[#a2abb3] text-xs">Pending</div>
+                    
+                    {status.currentTask && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-[#a2abb3]">Tarefa Atual:</span>
+                        <span className="text-white font-medium">{status.currentTask}</span>
+                      </div>
+                    )}
+                    
+                    <div className="grid grid-cols-3 gap-4 pt-4 border-t border-[#40484f]">
+                      <div className="text-center">
+                        <div className="text-lg font-bold text-white">{status.totalClipsProcessed}</div>
+                        <div className="text-[#a2abb3] text-xs">Processados</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-lg font-bold text-white">{status.totalClipsUploaded}</div>
+                        <div className="text-[#a2abb3] text-xs">Enviados</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-lg font-bold text-white">{status.queuedClips}</div>
+                        <div className="text-[#a2abb3] text-xs">Na Fila</div>
+                      </div>
                     </div>
                   </div>
+                ) : (
+                  <div className="text-[#a2abb3] text-center py-8">
+                    Nenhum status disponível
+                  </div>
                 )}
+              </div>
+
+              {/* Tab Navigation */}
+              <div className="mb-6 bg-[#1c1f22] border border-[#2c3135] rounded-xl p-6">
+                <h2 className="text-white text-[22px] font-bold leading-tight tracking-[-0.015em] mb-4">
+                  Execute New Workflow
+                </h2>
                 
-                {status?.isProcessingActive && (
-                  <div className="mt-4 flex items-center justify-center">
-                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse mr-2"></div>
-                    <span className="text-green-400 text-sm">Processing active...</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Tabs */}
-              <div className="flex gap-4 mb-6">
-                {['execute', 'templates', 'scheduled', 'status'].map((tab) => (
-                  <button
-                    key={tab}
-                    onClick={() => setActiveTab(tab)}
-                    className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
-                      activeTab === tab
-                        ? 'bg-[#2c90ea] text-white'
-                        : 'bg-[#2c3135] text-[#a2abb3] hover:text-white hover:bg-[#3c4147]'
-                    }`}
-                  >
-                    {tab.charAt(0).toUpperCase() + tab.slice(1)}
-                  </button>
-                ))}
-              </div>
-
-              {/* Tab Content */}
-              {activeTab === 'execute' && (
-                <div className="bg-[#1c1f22] border border-[#2c3135] rounded-xl p-6">
-                  <h2 className="text-white text-[22px] font-bold leading-tight tracking-[-0.015em] mb-4">
-                    Execute New Workflow
-                  </h2>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                    <div>
-                      <label className="block text-white text-sm font-medium mb-2">
-                        Channel Name
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.channelName}
-                        onChange={(e) => setFormData({ ...formData, channelName: e.target.value })}
-                        className="w-full bg-[#2c3135] border border-[#40484f] rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#2c90ea]"
-                        placeholder="Enter Twitch channel name (e.g., gaules)"
-                      />
-                    </div>
-                    
-                    <div>
-                      <label className="block text-white text-sm font-medium mb-2">
-                        Clip Limit
-                      </label>
-                      <input
-                        type="number"
-                        value={formData.clipLimit}
-                        onChange={(e) => setFormData({ ...formData, clipLimit: parseInt(e.target.value) || 10 })}
-                        className="w-full bg-[#2c3135] border border-[#40484f] rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#2c90ea]"
-                        min="1"
-                        max="50"
-                      />
-                    </div>
-                    
-                    <div>
-                      <label className="block text-white text-sm font-medium mb-2">
-                        Days Back
-                      </label>
-                      <input
-                        type="number"
-                        value={formData.daysBack}
-                        onChange={(e) => setFormData({ ...formData, daysBack: parseInt(e.target.value) || 7 })}
-                        className="w-full bg-[#2c3135] border border-[#40484f] rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#2c90ea]"
-                        min="1"
-                        max="30"
-                      />
-                    </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                  <div>
+                    <label className="block text-white text-sm font-medium mb-2">
+                      Channel Name
+                    </label>
+                    <input
+                      type="text"
+                      value={channelName}
+                      onChange={(e) => setChannelName(e.target.value)}
+                      className="w-full bg-[#2c3135] border border-[#40484f] rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#2c90ea]"
+                      placeholder="Enter Twitch channel name (e.g., gaules)"
+                    />
                   </div>
                   
+                  <div>
+                    <label className="block text-white text-sm font-medium mb-2">
+                      Clip Limit
+                    </label>
+                    <input
+                      type="number"
+                      value={clipLimit}
+                      onChange={(e) => setClipLimit(parseInt(e.target.value) || 10)}
+                      className="w-full bg-[#2c3135] border border-[#40484f] rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#2c90ea]"
+                      min="1"
+                      max="50"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-white text-sm font-medium mb-2">
+                      Days Back
+                    </label>
+                    <input
+                      type="number"
+                      value={daysBack}
+                      onChange={(e) => setDaysBack(parseInt(e.target.value) || 1)}
+                      className="w-full bg-[#2c3135] border border-[#40484f] rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#2c90ea]"
+                      min="1"
+                      max="30"
+                    />
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <button
                     onClick={handleExecuteWorkflow}
-                    disabled={executing || !isAutomationEnabled}
-                    className={`w-full py-3 rounded-xl text-white font-bold transition-colors ${
-                      executing || !isAutomationEnabled
-                        ? 'bg-gray-600 cursor-not-allowed'
-                        : 'bg-[#2c90ea] hover:bg-[#247bc7]'
-                    }`}
+                    disabled={isLoading}
+                    className="bg-blue-600 text-white py-3 px-6 rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-50"
                   >
-                    {executing ? 'Executing Workflow...' : 'Execute Workflow'}
+                    {isLoading ? "Executando..." : "Executar Workflow"}
                   </button>
                   
-                  {!isAutomationEnabled && (
-                    <p className="text-[#a2abb3] text-sm mt-2 text-center">
-                      Enable automation above to execute workflows
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {activeTab === 'templates' && (
-                <div className="bg-[#1c1f22] border border-[#2c3135] rounded-xl p-6">
-                  <h2 className="text-white text-[22px] font-bold leading-tight tracking-[-0.015em] mb-4">
-                    Templates
-                  </h2>
+                  <button
+                    onClick={handleRetryFailed}
+                    disabled={isLoading}
+                    className="bg-orange-600 text-white py-3 px-6 rounded-xl hover:bg-orange-700 transition-colors disabled:opacity-50"
+                  >
+                    {isLoading ? "Reprocessando..." : "Reprocessar Falhados"}
+                  </button>
                   
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {workflowTemplates.map((template, index) => (
-                      <div key={index} className="bg-[#2c3135] border border-[#40484f] rounded-xl p-4">
-                        <div className="flex items-center justify-between mb-2">
-                          <h3 className="text-white font-semibold">{template.name}</h3>
-                          <span className="bg-blue-900/20 text-blue-400 px-2 py-1 rounded text-xs">
-                            {template.category}
+                  <button
+                    onClick={handleTestAutomation}
+                    disabled={isLoading}
+                    className="bg-purple-600 text-white py-3 px-6 rounded-xl hover:bg-purple-700 transition-colors disabled:opacity-50"
+                  >
+                    {isLoading ? "Testando..." : "Testar Automação"}
+                  </button>
+                </div>
+              </div>
+
+              {/* Templates */}
+              <div className="bg-[#1c1f22] border border-[#2c3135] rounded-xl p-6">
+                <h2 className="text-white text-[22px] font-bold leading-tight tracking-[-0.015em] mb-4">
+                  Templates
+                </h2>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {workflowTemplates.map((template, index) => (
+                    <div key={index} className="bg-[#2c3135] border border-[#40484f] rounded-xl p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-white font-semibold">{template.name}</h3>
+                        <span className="bg-blue-900/20 text-blue-400 px-2 py-1 rounded text-xs">
+                          {template.category}
+                        </span>
+                      </div>
+                      <p className="text-[#a2abb3] text-sm mb-4">{template.description}</p>
+                      <div className="text-[#a2abb3] text-xs mb-4">
+                        <p>Clip Limit: {template.config.clipLimit}</p>
+                        <p>Days Back: {template.config.daysBack}</p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setChannelName(template.config.channelName);
+                          setClipLimit(template.config.clipLimit);
+                          setDaysBack(template.config.daysBack);
+                        }}
+                        className="w-full bg-[#2c90ea] text-white py-2 rounded-lg hover:bg-[#247bc7] transition-colors"
+                      >
+                        Use Template
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Scheduled Workflows */}
+              <div className="bg-[#1c1f22] border border-[#2c3135] rounded-xl p-6">
+                <h2 className="text-white text-[22px] font-bold leading-tight tracking-[-0.015em] mb-4">
+                  Scheduled Workflows
+                </h2>
+                
+                <div className="space-y-4">
+                  {[
+                    {
+                      id: 1,
+                      name: 'Daily Highlights',
+                      channel: 'gaules',
+                      schedule: 'Daily at 18:00',
+                      status: 'active',
+                      nextRun: '2024-01-15 18:00'
+                    }
+                  ].map((workflow) => (
+                    <div key={workflow.id} className="bg-[#2c3135] border border-[#40484f] rounded-xl p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="text-white font-semibold">{workflow.name}</h3>
+                          <p className="text-[#a2abb3] text-sm">Channel: {workflow.channel}</p>
+                          <p className="text-[#a2abb3] text-sm">Schedule: {workflow.schedule}</p>
+                          <p className="text-[#a2abb3] text-sm">Next Run: {workflow.nextRun}</p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                            workflow.status === 'active' 
+                              ? 'bg-green-900/20 text-green-400'
+                              : 'bg-yellow-900/20 text-yellow-400'
+                          }`}>
+                            {workflow.status}
                           </span>
+                          <button className="bg-[#2c90ea] text-white px-3 py-1 rounded text-sm hover:bg-[#247bc7] transition-colors">
+                            Edit
+                          </button>
                         </div>
-                        <p className="text-[#a2abb3] text-sm mb-4">{template.description}</p>
-                        <div className="text-[#a2abb3] text-xs mb-4">
-                          <p>Clip Limit: {template.config.clipLimit}</p>
-                          <p>Days Back: {template.config.daysBack}</p>
-                        </div>
-                        <button
-                          onClick={() => setFormData(template.config)}
-                          className="w-full bg-[#2c90ea] text-white py-2 rounded-lg hover:bg-[#247bc7] transition-colors"
-                        >
-                          Use Template
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {activeTab === 'scheduled' && (
-                <div className="bg-[#1c1f22] border border-[#2c3135] rounded-xl p-6">
-                  <h2 className="text-white text-[22px] font-bold leading-tight tracking-[-0.015em] mb-4">
-                    Scheduled Workflows
-                  </h2>
-                  
-                  <div className="space-y-4">
-                    {scheduledWorkflows.map((workflow) => (
-                      <div key={workflow.id} className="bg-[#2c3135] border border-[#40484f] rounded-xl p-4">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <h3 className="text-white font-semibold">{workflow.name}</h3>
-                            <p className="text-[#a2abb3] text-sm">Channel: {workflow.channel}</p>
-                            <p className="text-[#a2abb3] text-sm">Schedule: {workflow.schedule}</p>
-                            <p className="text-[#a2abb3] text-sm">Next Run: {workflow.nextRun}</p>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                              workflow.status === 'active' 
-                                ? 'bg-green-900/20 text-green-400'
-                                : 'bg-yellow-900/20 text-yellow-400'
-                            }`}>
-                              {workflow.status}
-                            </span>
-                            <button className="bg-[#2c90ea] text-white px-3 py-1 rounded text-sm hover:bg-[#247bc7] transition-colors">
-                              Edit
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {activeTab === 'status' && (
-                <div className="bg-[#1c1f22] border border-[#2c3135] rounded-xl p-6">
-                  <h2 className="text-white text-[22px] font-bold leading-tight tracking-[-0.015em] mb-4">
-                    Status
-                  </h2>
-                  
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div className="bg-[#2c3135] border border-[#40484f] rounded-xl p-4 text-center">
-                        <div className="text-2xl font-bold text-white">{status?.totalClipsPending || 0}</div>
-                        <div className="text-[#a2abb3] text-sm">Pending Clips</div>
-                      </div>
-                      <div className="bg-[#2c3135] border border-[#40484f] rounded-xl p-4 text-center">
-                        <div className="text-2xl font-bold text-white">{status?.totalClipsProcessed || 0}</div>
-                        <div className="text-[#a2abb3] text-sm">Processed Clips</div>
-                      </div>
-                      <div className="bg-[#2c3135] border border-[#40484f] rounded-xl p-4 text-center">
-                        <div className="text-2xl font-bold text-white">{status?.totalClipsDownloaded || 0}</div>
-                        <div className="text-[#a2abb3] text-sm">Downloaded Clips</div>
                       </div>
                     </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Status */}
+              <div className="bg-[#1c1f22] border border-[#2c3135] rounded-xl p-6">
+                <h2 className="text-white text-[22px] font-bold leading-tight tracking-[-0.015em] mb-4">
+                  Status
+                </h2>
+                
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                    <div className="bg-gray-800/50 p-6 rounded-xl border border-gray-700/50">
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-lg font-semibold text-white">Processados</h3>
+                        <span className="text-blue-400 text-xl">📊</span>
+                      </div>
+                      <p className="text-3xl font-bold text-blue-400">{status?.totalClipsProcessed || 0}</p>
+                      <p className="text-gray-400 text-sm mt-1">Clips processados</p>
+                    </div>
+
+                    <div className="bg-gray-800/50 p-6 rounded-xl border border-gray-700/50">
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-lg font-semibold text-white">Na Fila</h3>
+                        <span className="text-yellow-400 text-xl">⏳</span>
+                      </div>
+                      <p className="text-3xl font-bold text-yellow-400">{status?.queuedClips || 0}</p>
+                      <p className="text-gray-400 text-sm mt-1">Aguardando processamento</p>
+                    </div>
+
+                    <div className="bg-gray-800/50 p-6 rounded-xl border border-gray-700/50">
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-lg font-semibold text-white">Status</h3>
+                        <div className={`w-3 h-3 rounded-full ${status?.isRunning ? 'bg-green-400' : 'bg-red-400'}`} />
+                      </div>
+                      <p className="text-lg font-semibold text-white">
+                        {status?.isRunning ? 'Ativo' : 'Inativo'}
+                      </p>
+                      <p className="text-gray-400 text-sm mt-1">Sistema de automação</p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex gap-3">
+                    <button
+                      onClick={handleRetryFailed}
+                      disabled={isLoading}
+                      className="px-4 py-2 rounded-xl text-white font-medium transition-colors bg-orange-600 hover:bg-orange-700 disabled:opacity-50"
+                    >
+                      Retry Failed
+                    </button>
                     
-                    <div className="flex gap-3">
-                      <button
-                        onClick={handleRetryFailed}
-                        disabled={executing}
-                        className={`px-4 py-2 rounded-xl text-white font-medium transition-colors ${
-                          executing
-                            ? 'bg-gray-600 cursor-not-allowed'
-                            : 'bg-red-600 hover:bg-red-700'
-                        }`}
-                      >
-                        Retry Failed
-                      </button>
-                      
-                      <button
-                        onClick={handleTestAutomation}
-                        disabled={testing}
-                        className={`px-4 py-2 rounded-xl text-white font-medium transition-colors ${
-                          testing
-                            ? 'bg-gray-600 cursor-not-allowed'
-                            : 'bg-blue-600 hover:bg-blue-700'
-                        }`}
-                      >
-                        Test Automation
-                      </button>
-                    </div>
+                    <button
+                      onClick={handleTestAutomation}
+                      disabled={isLoading}
+                      className="px-4 py-2 rounded-xl text-white font-medium transition-colors bg-purple-600 hover:bg-purple-700 disabled:opacity-50"
+                    >
+                      Test Automation
+                    </button>
                   </div>
                 </div>
-              )}
+              </div>
 
               {/* Quick Actions */}
               <div className="mt-6 bg-[#1c1f22] border border-[#2c3135] rounded-xl p-6">
@@ -475,11 +476,11 @@ export default function WorkflowsPage() {
                 <div className="flex gap-3">
                   <button 
                     onClick={handleRetryFailed}
-                    disabled={executing}
+                    disabled={isLoading}
                     className={`px-4 py-2 rounded-xl font-medium transition-colors ${
-                      executing
+                      isLoading
                         ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
-                        : 'bg-red-600 text-white hover:bg-red-700'
+                        : 'bg-orange-600 text-white hover:bg-orange-700'
                     }`}
                   >
                     Retry Failed
@@ -487,11 +488,11 @@ export default function WorkflowsPage() {
                   
                   <button 
                     onClick={handleTestAutomation}
-                    disabled={testing}
+                    disabled={isLoading}
                     className={`px-4 py-2 rounded-xl font-medium transition-colors ${
-                      testing
+                      isLoading
                         ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
-                        : 'bg-blue-600 text-white hover:bg-blue-700'
+                        : 'bg-purple-600 text-white hover:bg-purple-700'
                     }`}
                   >
                     Test Automation

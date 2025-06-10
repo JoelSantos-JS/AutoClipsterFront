@@ -318,22 +318,59 @@ class ApiClient {
         console.log(`🎭 Mock API: ${method} ${endpoint}`);
         
         // Automation endpoints
-        if (endpoint.includes('/api/automation/status')) {
-          resolve(MOCK_DATA.automation.status as T);
-        } else if (endpoint.includes('/api/automation/execute')) {
-          resolve({
-            success: true,
-            workflowId: Date.now(),
-            message: 'Workflow executado com sucesso',
-            totalClipsFound: Math.floor(Math.random() * 20) + 5,
-            clipsDownloaded: Math.floor(Math.random() * 15) + 3
-          } as T);
-        } else if (endpoint.includes('/api/automation/retry-failed')) {
-          resolve({
-            success: true,
-            retriedWorkflows: 3,
-            message: 'Workflows falhados reexecutados'
-          } as T);
+        if (endpoint.includes('/api/automation')) {
+          if (endpoint.includes('/status')) {
+            resolve({
+              success: true,
+              isRunning: Math.random() > 0.6,
+              statistics: {
+                totalClips: Math.floor(Math.random() * 500) + 100,
+                pendingClips: Math.floor(Math.random() * 20),
+                processedToday: Math.floor(Math.random() * 50) + 10,
+                successRate: 85 + Math.random() * 10,
+                lastRun: new Date(Date.now() - Math.random() * 3600000).toISOString()
+              },
+              nextScheduledRun: new Date(Date.now() + Math.random() * 3600000).toISOString()
+            } as T);
+          } else if (endpoint.includes('/process') && method === 'POST') {
+            resolve({
+              success: true,
+              message: 'Processamento automático iniciado',
+              jobId: `job_${Date.now()}`,
+              estimatedDuration: '5-15 minutos',
+              clipsToProcess: Math.floor(Math.random() * 25) + 5
+            } as T);
+          } else if (endpoint.includes('/retry') && method === 'POST') {
+            resolve({
+              success: true,
+              message: 'Reprocessamento de clips falhados iniciado',
+              retriedClips: Math.floor(Math.random() * 10) + 2,
+              estimatedDuration: '2-8 minutos'
+            } as T);
+          } else if (endpoint.includes('/cleanup') && method === 'DELETE') {
+            const isDryRun = endpoint.includes('dryRun=true');
+            resolve({
+              success: true,
+              message: isDryRun ? 'Simulação de limpeza concluída' : 'Limpeza concluída com sucesso',
+              deletedClips: Math.floor(Math.random() * 30) + 5,
+              freedSpaceMB: Math.floor(Math.random() * 500) + 100,
+              dryRun: isDryRun
+            } as T);
+          } else if (endpoint.includes('/workflow') && method === 'POST') {
+            resolve({
+              success: true,
+              message: 'Workflow personalizado executado',
+              workflowId: `workflow_${Date.now()}`,
+              steps: [
+                { name: 'Análise de clips', status: 'completed', duration: '2s' },
+                { name: 'Processamento', status: 'running', duration: '0s' },
+                { name: 'Upload', status: 'pending', duration: '0s' }
+              ],
+              estimatedCompletion: new Date(Date.now() + 600000).toISOString()
+            } as T);
+          } else {
+            resolve({ success: true, message: 'Operação de automação realizada' } as T);
+          }
         }
         
         // Channels endpoints  
@@ -513,21 +550,245 @@ class ApiClient {
           }
         }
         
+        // Monitoring endpoints
+        else if (endpoint.includes('/api/monitoring')) {
+          if (endpoint.includes('/status')) {
+            resolve({
+              enabled: true,
+              isRunning: Math.random() > 0.7, // 30% chance of running
+              activeChannels: 3,
+              totalChannels: 5,
+              activeTasks: Math.random() > 0.8 ? Math.floor(Math.random() * 3) : 0,
+              lastFullRun: new Date(Date.now() - Math.random() * 3600000).toISOString(), // Random time in last hour
+              totalClipsDiscovered: 145 + Math.floor(Math.random() * 50),
+              clipsDiscoveredLast24h: Math.floor(Math.random() * 20) + 5
+            } as T);
+          } else if (endpoint.includes('/stats')) {
+            resolve({
+              monitoring: {
+                enabled: true,
+                isRunning: Math.random() > 0.7,
+                activeChannels: 3,
+                totalChannels: 5,
+                activeTasks: Math.random() > 0.8 ? Math.floor(Math.random() * 3) : 0,
+                lastFullRun: new Date(Date.now() - Math.random() * 3600000).toISOString(),
+                totalClipsDiscovered: 145 + Math.floor(Math.random() * 50),
+                clipsDiscoveredLast24h: Math.floor(Math.random() * 20) + 5
+              },
+              performance: {
+                avgClipsPerChannel: 28.0 + Math.random() * 10,
+                discoveryRate: Math.floor(Math.random() * 20) + 5,
+                systemEfficiency: 3.5 + Math.random() * 2
+              },
+              timestamp: new Date().toISOString()
+            } as T);
+          } else if (endpoint.includes('/health')) {
+            const healthy = Math.random() > 0.1; // 90% chance of being healthy
+            resolve({
+              status: healthy ? 'UP' : 'DOWN',
+              healthy,
+              monitoring: {
+                enabled: true,
+                running: healthy && Math.random() > 0.7,
+                activeChannels: 3,
+                activeTasks: Math.random() > 0.8 ? Math.floor(Math.random() * 3) : 0
+              },
+              lastCheck: new Date().toISOString()
+            } as T);
+          } else if (endpoint.includes('/config')) {
+            resolve({
+              description: 'Configurações do sistema de monitoramento automático',
+              schedulerInterval: '15 minutos',
+              defaultClipsPerChannel: 5,
+              defaultDaysBack: 1,
+              minViews: 50,
+              durationRange: '10-60 segundos',
+              minViralThreshold: 5.0,
+              currentStatus: {
+                enabled: true,
+                isRunning: Math.random() > 0.7,
+                activeChannels: 3,
+                totalChannels: 5,
+                activeTasks: 0,
+                lastFullRun: new Date(Date.now() - Math.random() * 3600000).toISOString(),
+                totalClipsDiscovered: 145,
+                clipsDiscoveredLast24h: 12
+              }
+            } as T);
+          } else if (endpoint.includes('/force') && method === 'POST') {
+            // Check if it's a specific channel
+            const pathParts = endpoint.split('/');
+            const channelName = pathParts[pathParts.length - 1];
+            
+            if (channelName && channelName !== 'force') {
+              resolve({
+                success: true,
+                message: `Monitoramento do canal '${channelName}' executado com sucesso`,
+                channelName,
+                monitored: true
+              } as T);
+            } else {
+              resolve({
+                success: true,
+                message: 'Monitoramento forçado iniciado com sucesso',
+                startedAt: new Date().toISOString()
+              } as T);
+            }
+          } else if (endpoint.includes('/stop') && method === 'POST') {
+            resolve({
+              success: true,
+              message: 'Monitoramento parado com sucesso'
+            } as T);
+          } else if (endpoint.includes('/resume') && method === 'POST') {
+            resolve({
+              success: true,
+              message: 'Monitoramento retomado com sucesso'
+            } as T);
+          } else {
+            resolve({ success: true, message: 'Operação de monitoramento realizada' } as T);
+          }
+        }
+        
         // Settings endpoints
         else if (endpoint.includes('/api/settings')) {
-          if (method === 'PUT') {
-            resolve('Configurações salvas com sucesso!' as T);
+          if (method === 'GET' && endpoint.endsWith('/api/settings')) {
+            // Get all settings
+            resolve({
+              success: true,
+              settings: {
+                autoUploadEnabled: Math.random() > 0.5,
+                autoUploadMinScore: 8.0,
+                minViralScore: 6.0,
+                minViews: 100,
+                minDuration: 10,
+                maxDuration: 60,
+                monitoringInterval: 15,
+                retryFailedUploads: true,
+                enableWebhooks: false,
+                webhookUrl: '',
+                youtubeShorts: {
+                  enabled: true,
+                  maxDuration: 60,
+                  aspectRatio: '9:16',
+                  hashtagsEnabled: true
+                },
+                geminiAI: {
+                  enabled: true,
+                  enhanceTitles: true,
+                  enhanceDescriptions: true,
+                  generateTags: true,
+                  viralScoreThreshold: 7.0
+                },
+                rateLimiting: {
+                  twitchApiCalls: 800,
+                  youtubeApiCalls: 10000,
+                  aiApiCalls: 100
+                }
+              }
+            } as T);
+          } else if (method === 'PUT' && endpoint.endsWith('/api/settings')) {
+            // Update settings
+            resolve({
+              success: true,
+              message: 'Configurações atualizadas com sucesso',
+              updatedSettings: {
+                autoUploadEnabled: Math.random() > 0.5,
+                autoUploadMinScore: 8.0,
+                minViralScore: 6.0,
+                minViews: 100,
+                minDuration: 10,
+                maxDuration: 60,
+                monitoringInterval: 15,
+                retryFailedUploads: true,
+                enableWebhooks: false,
+                youtubeShorts: {
+                  enabled: true,
+                  maxDuration: 60,
+                  aspectRatio: '9:16',
+                  hashtagsEnabled: true
+                },
+                geminiAI: {
+                  enabled: true,
+                  enhanceTitles: true,
+                  enhanceDescriptions: true,
+                  generateTags: true,
+                  viralScoreThreshold: 7.0
+                },
+                rateLimiting: {
+                  twitchApiCalls: 800,
+                  youtubeApiCalls: 10000,
+                  aiApiCalls: 100
+                }
+              },
+              restartRequired: Math.random() > 0.7
+            } as T);
+          } else if (endpoint.includes('/auto-upload/toggle') && method === 'POST') {
+            const isEnabled = Math.random() > 0.5;
+            resolve({
+              success: true,
+              autoUploadEnabled: isEnabled,
+              message: `Upload automático ${isEnabled ? 'habilitado' : 'desabilitado'} com sucesso`,
+              affectedClips: Math.floor(Math.random() * 10) + 2
+            } as T);
+          } else if (endpoint.includes('/auto-upload/status')) {
+            resolve({
+              autoUploadEnabled: Math.random() > 0.5,
+              lastCheck: new Date(Date.now() - Math.random() * 3600000).toISOString(),
+              pendingUploads: Math.floor(Math.random() * 15),
+              queuedClips: Math.floor(Math.random() * 8),
+              failedUploads: Math.floor(Math.random() * 3),
+              totalUploaded: Math.floor(Math.random() * 100) + 50,
+              averageUploadTime: Math.floor(Math.random() * 180) + 60
+            } as T);
+          } else if (endpoint.includes('/backup') && method === 'POST') {
+            resolve({
+              success: true,
+              backupId: `backup_${Date.now()}`,
+              timestamp: new Date().toISOString(),
+              message: 'Backup criado com sucesso'
+            } as T);
+          } else if (endpoint.includes('/restore') && method === 'POST') {
+            resolve({
+              success: true,
+              restoredSettings: {
+                autoUploadEnabled: false,
+                autoUploadMinScore: 8.0,
+                minViralScore: 6.0,
+                minViews: 100,
+                minDuration: 10,
+                maxDuration: 60,
+                monitoringInterval: 15,
+                retryFailedUploads: true,
+                enableWebhooks: false,
+                youtubeShorts: {
+                  enabled: true,
+                  maxDuration: 60,
+                  aspectRatio: '9:16',
+                  hashtagsEnabled: true
+                },
+                geminiAI: {
+                  enabled: true,
+                  enhanceTitles: true,
+                  enhanceDescriptions: true,
+                  generateTags: true,
+                  viralScoreThreshold: 7.0
+                },
+                rateLimiting: {
+                  twitchApiCalls: 800,
+                  youtubeApiCalls: 10000,
+                  aiApiCalls: 100
+                }
+              },
+              message: 'Configurações restauradas com sucesso'
+            } as T);
           } else if (endpoint.includes('/test-connections')) {
             resolve({
               'Twitch API': { success: true, message: 'Conectado', responseTime: 234 },
               'YouTube API': { success: true, message: 'Conectado', responseTime: 189 },
               'Gemini AI': { success: true, message: 'Conectado', responseTime: 145 }
             } as T);
-          } else if (endpoint.includes('/backup')) {
-            resolve('Backup criado com sucesso!' as T);
-          } else if (endpoint.includes('/restore')) {
-            resolve('Configurações restauradas com sucesso!' as T);
           } else {
+            // Legacy settings response
             resolve(MOCK_DATA.settings as T);
           }
         }

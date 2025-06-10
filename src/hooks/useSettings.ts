@@ -1,155 +1,249 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { settingsService, AdvancedSettings, AutoUploadStatusResponse } from '../services/settings';
 
-export interface Settings {
-  upload: {
-    autoUpload: boolean;
-    quality: string;
-    format: string;
-    privacy: string;
-  };
-  ai: {
-    autoClipping: boolean;
-    smartThumbnails: boolean;
-    autoTitles: boolean;
-    contentAnalysis: boolean;
-  };
-  quality: {
-    resolution: string;
-    bitrate: string;
-    fps: string;
-    codec: string;
-  };
-  notifications: {
-    email: boolean;
-    push: boolean;
-    discord: boolean;
-    slack: boolean;
-  };
-  apiKeys: {
-    youtube: string;
-    twitch: string;
-    discord: string;
-    openai: string;
-  };
+export interface UseSettingsReturn {
+  // Estado das configurações
+  settings: AdvancedSettings | null;
+  autoUploadStatus: AutoUploadStatusResponse | null;
+  isLoading: boolean;
+  error: string | null;
+  
+  // Funções principais
+  loadSettings: () => Promise<void>;
+  updateSettings: (settings: Partial<AdvancedSettings>) => Promise<void>;
+  saveSettings: (settings: Partial<AdvancedSettings>) => Promise<void>;
+  
+  // Auto-upload
+  toggleAutoUpload: (enabled: boolean) => Promise<void>;
+  loadAutoUploadStatus: () => Promise<void>;
+  
+  // Backup e restore
+  createBackup: () => Promise<string | null>;
+  restoreFromBackup: (backupId: string) => Promise<void>;
+  
+  // Estados de carregamento específicos
+  savingSettings: boolean;
+  togglingAutoUpload: boolean;
+  creatingBackup: boolean;
+  restoringBackup: boolean;
+  
+  // Utilidades
+  formatSettingsForDisplay: (settings?: AdvancedSettings) => Record<string, string | number | boolean>;
+  validateSettings: (settings: Partial<AdvancedSettings>) => string[];
+  getDefaultSettings: () => AdvancedSettings;
 }
 
-const defaultSettings: Settings = {
-  upload: {
-    autoUpload: false,
-    quality: '1080p',
-    format: 'mp4',
-    privacy: 'public',
-  },
-  ai: {
-    autoClipping: true,
-    smartThumbnails: true,
-    autoTitles: false,
-    contentAnalysis: true,
-  },
-  quality: {
-    resolution: '1920x1080',
-    bitrate: '8000',
-    fps: '60',
-    codec: 'h264',
-  },
-  notifications: {
-    email: true,
-    push: false,
-    discord: false,
-    slack: false,
-  },
-  apiKeys: {
-    youtube: '',
-    twitch: '',
-    discord: '',
-    openai: '',
-  },
-};
-
-export function useSettings() {
-  const [settings, setSettings] = useState<Settings>(defaultSettings);
-  const [loading, setLoading] = useState(false);
+export const useSettings = (): UseSettingsReturn => {
+  const [settings, setSettings] = useState<AdvancedSettings | null>(null);
+  const [autoUploadStatus, setAutoUploadStatus] = useState<AutoUploadStatusResponse | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // Estados de carregamento específicos
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [togglingAutoUpload, setTogglingAutoUpload] = useState(false);
+  const [creatingBackup, setCreatingBackup] = useState(false);
+  const [restoringBackup, setRestoringBackup] = useState(false);
 
-  // Simulate fetching settings from API
-  const fetchSettings = async () => {
-    setLoading(true);
-    setError(null);
-    
+  // Carregar configurações
+  const loadSettings = useCallback(async () => {
     try {
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      setIsLoading(true);
+      setError(null);
+      console.log('🔄 Carregando configurações...');
       
-      // In a real app, this would be an API call
-      const savedSettings = localStorage.getItem('app-settings');
-      if (savedSettings) {
-        setSettings(JSON.parse(savedSettings));
-      }
-    } catch {
-      setError('Failed to load settings');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Simulate saving settings to API
-  const saveSettings = async (newSettings: Settings) => {
-    setLoading(true);
-    setError(null);
-    
-    try {
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      const settingsResponse = await settingsService.getSettings();
+      setSettings(settingsResponse);
       
-      // In a real app, this would be an API call
-      localStorage.setItem('app-settings', JSON.stringify(newSettings));
-      setSettings(newSettings);
-      
-      return { success: true };
-    } catch {
-      setError('Failed to save settings');
-      throw new Error('Failed to save settings');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Test API connections
-  const testConnection = async (service: string) => {
-    setLoading(true);
-    setError(null);
-    
-    try {
-      // Simulate API test delay
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // Simulate random success/failure for demo
-      const isSuccess = Math.random() > 0.3;
-      
-      if (!isSuccess) {
-        throw new Error(`Failed to connect to ${service}`);
-      }
-      
-      return { success: true, message: `Successfully connected to ${service}` };
+      console.log('✅ Configurações carregadas:', settingsResponse);
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : `Failed to test ${service} connection`;
+      const errorMessage = err instanceof Error ? err.message : 'Erro ao carregar configurações';
+      console.error('❌ Erro ao carregar configurações:', errorMessage);
       setError(errorMessage);
-      throw new Error(errorMessage);
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchSettings();
   }, []);
+
+  // Atualizar configurações
+  const updateSettings = useCallback(async (updatedSettings: Partial<AdvancedSettings>) => {
+    try {
+      setSavingSettings(true);
+      setError(null);
+      console.log('🔄 Atualizando configurações...', updatedSettings);
+      
+      const response = await settingsService.updateSettings(updatedSettings);
+      
+      if (response.success) {
+        setSettings(response.updatedSettings);
+        console.log('✅ Configurações atualizadas:', response.updatedSettings);
+        
+        if (response.restartRequired) {
+          console.log('⚠️ Reinicialização necessária para aplicar mudanças');
+        }
+      } else {
+        throw new Error(response.message);
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Erro ao atualizar configurações';
+      console.error('❌ Erro ao atualizar configurações:', errorMessage);
+      setError(errorMessage);
+    } finally {
+      setSavingSettings(false);
+    }
+  }, []);
+
+  // Salvar configurações (alias para updateSettings)
+  const saveSettings = useCallback(async (updatedSettings: Partial<AdvancedSettings>) => {
+    await updateSettings(updatedSettings);
+  }, [updateSettings]);
+
+  // Toggle auto-upload
+  const toggleAutoUpload = useCallback(async (enabled: boolean) => {
+    try {
+      setTogglingAutoUpload(true);
+      setError(null);
+      console.log(`🔄 ${enabled ? 'Habilitando' : 'Desabilitando'} upload automático...`);
+      
+      const response = await settingsService.toggleAutoUpload(enabled);
+      
+      if (response.success) {
+        console.log(`✅ Upload automático ${enabled ? 'habilitado' : 'desabilitado'}:`, {
+          enabled: response.autoUploadEnabled,
+          affectedClips: response.affectedClips
+        });
+        
+        // Atualizar configurações locais
+        if (settings) {
+          setSettings({
+            ...settings,
+            autoUploadEnabled: response.autoUploadEnabled
+          });
+        }
+        
+        // Recarregar status
+        await loadAutoUploadStatus();
+      } else {
+        throw new Error(response.message);
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Erro ao alterar upload automático';
+      console.error('❌ Erro ao alterar upload automático:', errorMessage);
+      setError(errorMessage);
+    } finally {
+      setTogglingAutoUpload(false);
+    }
+  }, [settings]);
+
+  // Carregar status do auto-upload
+  const loadAutoUploadStatus = useCallback(async () => {
+    try {
+      console.log('🔄 Carregando status do upload automático...');
+      
+      const status = await settingsService.getAutoUploadStatus();
+      setAutoUploadStatus(status);
+      
+      console.log('✅ Status do upload automático:', {
+        enabled: status.autoUploadEnabled,
+        pending: status.pendingUploads,
+        queued: status.queuedClips,
+        failed: status.failedUploads
+      });
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Erro ao carregar status do upload';
+      console.error('❌ Erro ao carregar status do upload:', errorMessage);
+      setError(errorMessage);
+    }
+  }, []);
+
+  // Criar backup
+  const createBackup = useCallback(async (): Promise<string | null> => {
+    try {
+      setCreatingBackup(true);
+      setError(null);
+      console.log('🔄 Criando backup das configurações...');
+      
+      const response = await settingsService.createBackup();
+      
+      if (response.success) {
+        console.log('✅ Backup criado:', {
+          backupId: response.backupId,
+          timestamp: response.timestamp
+        });
+        return response.backupId;
+      } else {
+        throw new Error(response.message);
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Erro ao criar backup';
+      console.error('❌ Erro ao criar backup:', errorMessage);
+      setError(errorMessage);
+      return null;
+    } finally {
+      setCreatingBackup(false);
+    }
+  }, []);
+
+  // Restaurar backup
+  const restoreFromBackup = useCallback(async (backupId: string) => {
+    try {
+      setRestoringBackup(true);
+      setError(null);
+      console.log('🔄 Restaurando configurações do backup:', backupId);
+      
+      const response = await settingsService.restoreFromBackup(backupId);
+      
+      if (response.success) {
+        setSettings(response.restoredSettings);
+        console.log('✅ Configurações restauradas:', response.restoredSettings);
+        
+        // Recarregar status após restaurar
+        await loadAutoUploadStatus();
+      } else {
+        throw new Error(response.message);
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Erro ao restaurar backup';
+      console.error('❌ Erro ao restaurar backup:', errorMessage);
+      setError(errorMessage);
+    } finally {
+      setRestoringBackup(false);
+    }
+  }, [loadAutoUploadStatus]);
+
+  // Carregar dados iniciais
+  useEffect(() => {
+    const loadInitialData = async () => {
+      await Promise.all([
+        loadSettings(),
+        loadAutoUploadStatus()
+      ]);
+    };
+    
+    loadInitialData();
+  }, [loadSettings, loadAutoUploadStatus]);
 
   return {
     settings,
-    loading,
+    autoUploadStatus,
+    isLoading,
     error,
-    fetchSettings,
+    loadSettings,
+    updateSettings,
     saveSettings,
-    testConnection,
+    toggleAutoUpload,
+    loadAutoUploadStatus,
+    createBackup,
+    restoreFromBackup,
+    savingSettings,
+    togglingAutoUpload,
+    creatingBackup,
+    restoringBackup,
+    formatSettingsForDisplay: (settings?: AdvancedSettings) => {
+      if (!settings) return {};
+      return settingsService.formatSettingsForDisplay(settings);
+    },
+    validateSettings: settingsService.validateSettings,
+    getDefaultSettings: settingsService.getDefaultSettings
   };
-} 
+}; 
